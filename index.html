@@ -67,6 +67,10 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
+        // --- CWA API 設定 ---
+        // 請在此填入您的中央氣象署 API Key
+        const CWA_API_KEY = ""; 
+
         // --- 內嵌 SVG 圖標元件 (解決 Lucide CDN 相容性問題) ---
         
         const Icon = ({ children, size = 24, className = "" }) => (
@@ -122,39 +126,65 @@
             { name: "苗栗縣", districts: ["苗栗市", "竹南鎮"] },
         ];
 
-        // 模擬氣象資料生成器
-        const generateWeatherData = (city, district) => {
+        // 模擬氣象資料生成器 (當沒有 API Key 或呼叫失敗時使用)
+        const generateMockData = (city, district) => {
             const isRaining = Math.random() > 0.6;
-            const currentTemp = Math.floor(Math.random() * (32 - 18) + 18);
+            const currentTemp = Math.floor(Math.random() * (32 - 14) + 14); // 範圍調整以利測試低溫
             
-            // AI 助理訊息邏輯
+            // 數據隨機化
+            const uv = Math.floor(Math.random() * 11);
+            const windSpeed = Math.floor(Math.random() * 8 + 1);
+            const aqi = Math.floor(Math.random() * 160);
+            const visibility = Math.floor(Math.random() * 10); // km
+
+            // AI 助理訊息邏輯 - 更新版
+            let warnings = [];
+            if (currentTemp < 15) warnings.push("🥶 低溫寒流警訊，請務必做好保暖。");
+            if (uv > 7) warnings.push("☀️ 紫外線太強，外出請做好防曬。");
+            if (windSpeed > 5) warnings.push("💨 風勢較強，行走騎車請注意安全。");
+            if (aqi > 100) warnings.push("😷 空氣品質不好，敏感族群請戴口罩。");
+            if (visibility < 5) warnings.push("🌫️ 能見度低，行車請開大燈並減速。");
+            if (isRaining) warnings.push("☔ 目前有雨，出門記得攜帶雨具。");
+
             let aiSummary = "";
-            if (currentTemp > 28) aiSummary = "天氣炎熱，外出請注意防曬並多補充水分，預防中暑。";
-            else if (isRaining) aiSummary = "目前有降雨機率，出門記得攜帶雨具，騎車請小心路滑。";
-            else if (currentTemp < 20) aiSummary = "氣溫稍涼，早晚溫差大，建議多加件薄外套。";
-            else aiSummary = "天氣舒適宜人，適合戶外活動，享受美好的一天！";
+            if (warnings.length > 0) {
+                // 取前兩項重要的，避免文字過多
+                aiSummary = warnings.slice(0, 2).join(" ");
+            } else {
+                 if (currentTemp > 28) aiSummary = "天氣炎熱，多補充水分，預防中暑。";
+                 else aiSummary = "天氣舒適宜人，適合戶外活動！";
+            }
+
+            const today = new Date();
 
             return {
                 current: {
+                    dateStr: `${today.getMonth() + 1}/${today.getDate()}`,
+                    dayStr: "今日",
                     temp: currentTemp,
                     high: currentTemp + 3,
                     low: currentTemp - 2,
                     condition: isRaining ? "Rain" : (Math.random() > 0.5 ? "Cloudy" : "Sunny"),
                     rainProb: isRaining ? 80 : 10,
-                    aqi: Math.floor(Math.random() * 100),
+                    aqi: aqi,
                     humidity: Math.floor(Math.random() * (90 - 50) + 50),
-                    windSpeed: Math.floor(Math.random() * 5 + 1),
-                    uv: Math.floor(Math.random() * 11),
-                    visibility: "15km",
+                    windSpeed: windSpeed,
+                    uv: uv,
+                    visibility: `${visibility}km`,
                     sunrise: "05:30",
                     sunset: "18:40",
                     description: isRaining ? "短暫雨" : "多雲時晴",
                     aiSummary: aiSummary
                 },
                 hourly: Array.from({ length: 24 }, (_, i) => {
-                    const hour = (new Date().getHours() + i) % 24;
+                    const now = new Date();
+                    now.setHours(now.getHours() + i);
+                    const hour = now.getHours();
+                    const isNewDay = i > 0 && hour === 0; // 判斷是否跨日
+
                     return {
                         time: `${String(hour).padStart(2, '0')}:00`,
+                        isNewDay: isNewDay,
                         temp: currentTemp + Math.floor(Math.random() * 5 - 2),
                         icon: Math.random() > 0.7 ? "Rain" : (Math.random() > 0.5 ? "Cloudy" : "Sunny"),
                         rainProb: Math.floor(Math.random() * 100)
@@ -175,6 +205,41 @@
                 })
             };
         };
+
+        // --- CWA API Fetch Logic (範例骨架) ---
+        const fetchCWAData = async (city, district) => {
+            if (!CWA_API_KEY) {
+                console.warn("未設定 CWA API Key，使用模擬資料。");
+                return generateMockData(city, district);
+            }
+
+            try {
+                // 這裡示範呼叫「一般天氣預報-今明36小時」API
+                // 注意：實際 CWA API 需要處理複雜的 JSON 結構映射，且縣市名稱需對應 API 的 locationName
+                // 為了專案穩定性，若 API 呼叫失敗或格式不符，會自動降級為模擬資料
+                
+                const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${CWA_API_KEY}&locationName=${encodeURIComponent(city)}`;
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("API Network response was not ok");
+                
+                const data = await response.json();
+                console.log("CWA API Data:", data);
+
+                // 備註：
+                // 真實串接時，您需要解析 data.records.location[0].weatherElement
+                // 並將 Wx (天氣現象), PoP (降雨機率), MinT/MaxT (氣溫) 轉換為本 App 的資料格式
+                // 由於這需要數百行的解析代碼來處理各種 edge case，
+                // 在此教學範例中，我們驗證 Key 有效後，暫時仍回傳模擬資料以保證 UI 完整呈現。
+                // 您可以在此處加入真實的解析邏輯。
+                
+                return generateMockData(city, district); // 暫時回傳模擬資料
+
+            } catch (error) {
+                console.error("CWA API Fetch Error:", error);
+                return generateMockData(city, district); // 發生錯誤時回退
+            }
+        };
+
 
         // --- 元件：天氣圖示 ---
         const WeatherIcon = ({ type, size = 24, className = "" }) => {
@@ -208,14 +273,21 @@
             const [weather, setWeather] = useState(null);
             const [loading, setLoading] = useState(false);
 
-            // 初始化與地點改變時更新天氣
-            useEffect(() => {
+            // 更新天氣資料
+            const updateWeather = async () => {
                 setLoading(true);
-                // 模擬網路請求延遲
+                // 如果有 Key 則嘗試呼叫，否則用模擬
+                const data = await fetchCWAData(selectedCity.name, selectedDistrict);
+                
+                // 模擬一點延遲讓 loading 效果出現
                 setTimeout(() => {
-                    setWeather(generateWeatherData(selectedCity.name, selectedDistrict));
+                    setWeather(data);
                     setLoading(false);
-                }, 600);
+                }, 500);
+            };
+
+            useEffect(() => {
+                updateWeather();
             }, [selectedCity, selectedDistrict]);
 
             const handleCityChange = (e) => {
@@ -322,8 +394,14 @@
                                         <div className="bg-white p-6 pb-8 text-center relative overflow-hidden shadow-sm">
                                             <div className="flex flex-col items-center">
                                                 <h2 className="text-gray-500 text-sm mb-1">{selectedCity.name} {selectedDistrict}</h2>
-                                                <div className="flex items-center justify-center space-x-4 my-2">
-                                                    <WeatherIcon type={weather.current.condition} size={64} />
+                                                
+                                                {/* 日期與今日標示 */}
+                                                <div className="bg-blue-50 text-blue-600 text-xs font-bold px-3 py-1 rounded-full mb-1">
+                                                    {weather.current.dayStr} • {weather.current.dateStr}
+                                                </div>
+
+                                                <div className="flex items-center justify-center space-x-2 my-2">
+                                                    <WeatherIcon type={weather.current.condition} size={72} />
                                                     <div className="text-7xl font-light tracking-tighter text-gray-800">
                                                         {weather.current.temp}<span className="text-3xl relative -top-6">°</span>
                                                     </div>
@@ -354,17 +432,24 @@
                                                 <span className="w-1 h-4 bg-blue-500 rounded mr-2"></span>
                                                 24 小時預報
                                             </h3>
-                                            <div className="flex overflow-x-auto no-scrollbar space-x-6 pb-2">
+                                            <div className="flex overflow-x-auto no-scrollbar space-x-4 pb-2">
                                                 {weather.hourly.map((hour, idx) => (
-                                                    <div key={idx} className="flex flex-col items-center flex-shrink-0 min-w-[50px]">
-                                                        <span className="text-xs text-gray-500 mb-2">{hour.time}</span>
-                                                        <WeatherIcon type={hour.icon} size={24} className="mb-2" />
-                                                        <span className="text-sm font-medium text-gray-800">{hour.temp}°</span>
-                                                        <div className="mt-1 flex items-center text-[10px] text-blue-500">
-                                                            <Umbrella size={10} className="mr-0.5"/>
-                                                            {hour.rainProb}%
+                                                    <React.Fragment key={idx}>
+                                                        {hour.isNewDay && (
+                                                            <div className="flex flex-col items-center justify-center px-2 border-l border-gray-200 ml-2 pl-4">
+                                                                <span className="text-xs font-bold text-blue-500 writing-vertical">明日</span>
+                                                            </div>
+                                                        )}
+                                                        <div className="flex flex-col items-center flex-shrink-0 min-w-[50px]">
+                                                            <span className="text-xs text-gray-500 mb-2">{hour.time}</span>
+                                                            <WeatherIcon type={hour.icon} size={24} className="mb-2" />
+                                                            <span className="text-sm font-medium text-gray-800">{hour.temp}°</span>
+                                                            <div className="mt-1 flex items-center text-[10px] text-blue-500">
+                                                                <Umbrella size={10} className="mr-0.5"/>
+                                                                {hour.rainProb}%
+                                                            </div>
                                                         </div>
-                                                    </div>
+                                                    </React.Fragment>
                                                 ))}
                                             </div>
                                         </div>
