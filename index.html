@@ -4,587 +4,511 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>台灣氣象 - Taiwan Weather</title>
-    <!-- Tailwind CSS (用於快速切版) -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Font Awesome (用於圖標) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Google Fonts: Noto Sans TC -->
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
     
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
     <style>
-        /* 全局設定 */
+        /* 自定義字型與樣式優化 */
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
+        
         body {
-            font-family: 'Noto Sans TC', sans-serif;
-            background-color: #f0f2f5; /* 背景灰，模擬手機桌面背景 */
+            font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #f0f2f5;
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* 模擬手機 App 容器 */
-        #app-container {
-            max-width: 480px; /* 手機寬度限制 */
-            margin: 0 auto;
-            background-color: #ffffff;
-            min-height: 100vh;
-            position: relative;
-            box-shadow: 0 0 20px rgba(0,0,0,0.05);
-        }
-
-        /* 隱藏捲軸但保留功能 */
-        .hide-scrollbar::-webkit-scrollbar {
+        /* 隱藏 Scrollbar 但保持功能 */
+        .no-scrollbar::-webkit-scrollbar {
             display: none;
         }
-        .hide-scrollbar {
+        .no-scrollbar {
             -ms-overflow-style: none;
             scrollbar-width: none;
         }
 
-        /* Yahoo! JP 風格配色變數 */
-        :root {
-            --y-red: #e60033;
-            --y-blue: #0073e6;
-            --y-gray: #666666;
-            --y-orange: #ff9900;
+        /* 模擬手機外框在桌機上 */
+        #root {
+            max-width: 480px;
+            margin: 0 auto;
+            min-height: 100vh;
+            background-color: #ffffff;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            position: relative;
         }
 
-        .text-y-red { color: var(--y-red); }
-        .text-y-blue { color: var(--y-blue); }
-        .bg-y-red { background-color: var(--y-red); }
+        /* Yahoo JP 風格的漸層背景 */
+        .bg-yahoo-blue {
+            background: linear-gradient(180deg, #4a90e2 0%, #ffffff 100%);
+        }
+        .bg-yahoo-gray {
+            background: #f5f6f7;
+        }
         
-        /* 頁籤切換動畫 */
-        .tab-content {
-            display: none;
-            animation: fadeIn 0.3s ease;
-        }
-        .tab-content.active {
-            display: block;
-        }
-
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(5px); }
             to { opacity: 1; transform: translateY(0); }
         }
-
-        /* 底部導覽列樣式 (類似 Yahoo App 的頁首下方導覽) */
-        .nav-item.active {
-            color: #000;
-            font-weight: 700;
-            border-bottom: 3px solid var(--y-red);
-        }
-
-        /* Loading Overlay */
-        #loading-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(255,255,255,0.8);
-            z-index: 100;
-            display: none;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
+        .animate-fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
         }
     </style>
 </head>
-<body class="text-gray-800">
+<body>
+    <div id="root"></div>
 
-    <div id="app-container">
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // --- 內嵌 SVG 圖標元件 (解決 Lucide CDN 相容性問題) ---
         
-        <!-- Loading Overlay -->
-        <div id="loading-overlay">
-            <i class="fa-solid fa-circle-notch fa-spin text-y-blue text-4xl mb-2"></i>
-            <span class="text-xs text-gray-500 font-bold">資料更新中...</span>
-        </div>
+        const Icon = ({ children, size = 24, className = "" }) => (
+            <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width={size} 
+                height={size} 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                className={className}
+            >
+                {children}
+            </svg>
+        );
 
-        <!-- 1. Header & Location (Fixed) -->
-        <header class="sticky top-0 z-50 bg-white border-b border-gray-100">
-            <div class="flex items-center justify-between px-4 py-3">
-                <div class="flex items-center space-x-2" id="location-trigger">
-                    <i class="fa-solid fa-location-dot text-y-red text-lg"></i>
-                    <!-- 模擬下拉選單 -->
-                    <select id="location-select" class="text-lg font-bold bg-transparent border-none outline-none appearance-none cursor-pointer pr-4">
-                        <option value="Taipei">臺北市</option>
-                        <option value="NewTaipei">新北市</option>
-                        <option value="Kaohsiung" selected>高雄市</option>
-                        <option value="Taichung">臺中市</option>
-                        <option value="Tainan">臺南市</option>
-                        <option value="Hualien">花蓮縣</option>
-                    </select>
-                    <i class="fa-solid fa-chevron-down text-xs text-gray-400 -ml-2 pointer-events-none"></i>
+        const Navigation = (p) => <Icon {...p}><polygon points="3 11 22 2 13 21 11 13 3 11"/></Icon>;
+        const ArrowDown = (p) => <Icon {...p}><polyline points="6 9 12 15 18 9"/></Icon>;
+        const Sun = (p) => <Icon {...p}><circle cx="12" cy="12" r="5"/><path d="M12 1v2"/><path d="M12 21v2"/><path d="M4.22 4.22l1.42 1.42"/><path d="M18.36 18.36l1.42 1.42"/><path d="M1 12h2"/><path d="M21 12h2"/><path d="M4.22 19.78l1.42-1.42"/><path d="M18.36 5.64l1.42-1.42"/></Icon>;
+        const Cloud = (p) => <Icon {...p}><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></Icon>;
+        const CloudRain = (p) => <Icon {...p}><path d="M16 13v8"/><path d="M8 13v8"/><path d="M12 15v8"/><path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"/></Icon>;
+        const Umbrella = (p) => <Icon {...p}><path d="M23 12a11.05 11.05 0 0 0-22 0zm-5 7a3 3 0 0 1-6 0v-7"/></Icon>;
+        const Wind = (p) => <Icon {...p}><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/></Icon>;
+        const Droplets = (p) => <Icon {...p}><path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.8-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z"/><path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97"/></Icon>;
+        const Eye = (p) => <Icon {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></Icon>;
+        const Sunrise = (p) => <Icon {...p}><path d="M12 2v8"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m8 6 4-4 4 4"/><path d="M16 18a4 4 0 0 0-8 0"/></Icon>;
+        const Sunset = (p) => <Icon {...p}><path d="M12 10V2"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m16 6-4 4-4-4"/><path d="M16 18a4 4 0 0 0-8 0"/></Icon>;
+        const Sparkles = (p) => <Icon {...p}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 3v4"/><path d="M3 5h4"/><path d="M3 9h4"/></Icon>;
+        const Bot = (p) => <Icon {...p}><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></Icon>;
+
+        // --- 資料設定 (模擬 CWA API 回傳結構與縣市資料) ---
+
+        const CITIES = [
+            { name: "臺北市", districts: ["信義區", "大安區", "中正區", "士林區", "北投區"] },
+            { name: "新北市", districts: ["板橋區", "新莊區", "中和區", "淡水區", "林口區"] },
+            { name: "桃園市", districts: ["桃園區", "中壢區", "蘆竹區", "龜山區"] },
+            { name: "臺中市", districts: ["西屯區", "北屯區", "南屯區", "豐原區"] },
+            { name: "臺南市", districts: ["安平區", "東區", "永康區", "中西區"] },
+            { name: "高雄市", districts: ["苓雅區", "左營區", "鼓山區", "前鎮區", "鳳山區"] },
+            { name: "基隆市", districts: ["仁愛區", "信義區"] },
+            { name: "新竹市", districts: ["東區", "北區"] },
+            { name: "嘉義市", districts: ["東區", "西區"] },
+            { name: "宜蘭縣", districts: ["宜蘭市", "羅東鎮"] },
+            { name: "花蓮縣", districts: ["花蓮市", "吉安鄉"] },
+            { name: "臺東縣", districts: ["臺東市", "卑南鄉"] },
+            { name: "南投縣", districts: ["南投市", "埔里鎮"] },
+            { name: "雲林縣", districts: ["斗六市", "虎尾鎮"] },
+            { name: "彰化縣", districts: ["彰化市", "員林市"] },
+            { name: "屏東縣", districts: ["屏東市", "恆春鎮"] },
+            { name: "苗栗縣", districts: ["苗栗市", "竹南鎮"] },
+        ];
+
+        // 模擬氣象資料生成器
+        const generateWeatherData = (city, district) => {
+            const isRaining = Math.random() > 0.6;
+            const currentTemp = Math.floor(Math.random() * (32 - 18) + 18);
+            
+            // AI 助理訊息邏輯
+            let aiSummary = "";
+            if (currentTemp > 28) aiSummary = "天氣炎熱，外出請注意防曬並多補充水分，預防中暑。";
+            else if (isRaining) aiSummary = "目前有降雨機率，出門記得攜帶雨具，騎車請小心路滑。";
+            else if (currentTemp < 20) aiSummary = "氣溫稍涼，早晚溫差大，建議多加件薄外套。";
+            else aiSummary = "天氣舒適宜人，適合戶外活動，享受美好的一天！";
+
+            return {
+                current: {
+                    temp: currentTemp,
+                    high: currentTemp + 3,
+                    low: currentTemp - 2,
+                    condition: isRaining ? "Rain" : (Math.random() > 0.5 ? "Cloudy" : "Sunny"),
+                    rainProb: isRaining ? 80 : 10,
+                    aqi: Math.floor(Math.random() * 100),
+                    humidity: Math.floor(Math.random() * (90 - 50) + 50),
+                    windSpeed: Math.floor(Math.random() * 5 + 1),
+                    uv: Math.floor(Math.random() * 11),
+                    visibility: "15km",
+                    sunrise: "05:30",
+                    sunset: "18:40",
+                    description: isRaining ? "短暫雨" : "多雲時晴",
+                    aiSummary: aiSummary
+                },
+                hourly: Array.from({ length: 24 }, (_, i) => {
+                    const hour = (new Date().getHours() + i) % 24;
+                    return {
+                        time: `${String(hour).padStart(2, '0')}:00`,
+                        temp: currentTemp + Math.floor(Math.random() * 5 - 2),
+                        icon: Math.random() > 0.7 ? "Rain" : (Math.random() > 0.5 ? "Cloudy" : "Sunny"),
+                        rainProb: Math.floor(Math.random() * 100)
+                    };
+                }),
+                daily: Array.from({ length: 7 }, (_, i) => {
+                    const date = new Date();
+                    date.setDate(date.getDate() + i);
+                    const dayName = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"][date.getDay()];
+                    return {
+                        date: `${date.getMonth() + 1}/${date.getDate()}`,
+                        day: i === 0 ? "今日" : dayName,
+                        high: currentTemp + 4,
+                        low: currentTemp - 3,
+                        icon: Math.random() > 0.6 ? "Rain" : (Math.random() > 0.4 ? "Cloudy" : "Sunny"),
+                        rainProb: Math.floor(Math.random() * 100)
+                    };
+                })
+            };
+        };
+
+        // --- 元件：天氣圖示 ---
+        const WeatherIcon = ({ type, size = 24, className = "" }) => {
+            if (type === "Sunny") return <Sun size={size} className={`text-orange-500 ${className}`} />;
+            if (type === "Cloudy") return <Cloud size={size} className={`text-gray-400 ${className}`} />;
+            if (type === "Rain") return <CloudRain size={size} className={`text-blue-500 ${className}`} />;
+            return <Sun size={size} className={`text-orange-500 ${className}`} />;
+        };
+
+        // --- 元件：AQI 標籤 ---
+        const AQIBadge = ({ value }) => {
+            let color = "bg-green-500";
+            let text = "良好";
+            if (value > 50) { color = "bg-yellow-400"; text = "普通"; }
+            if (value > 100) { color = "bg-orange-500"; text = "敏感"; }
+            if (value > 150) { color = "bg-red-500"; text = "不良"; }
+
+            return (
+                <div className={`flex items-center space-x-1 px-2 py-0.5 rounded-full text-white text-xs font-bold ${color}`}>
+                    <span>AQI {value}</span>
+                    <span>{text}</span>
                 </div>
-                
-                <button onclick="getUserLocation()" class="p-2 rounded-full active:bg-gray-100 transition">
-                    <i class="fa-solid fa-crosshairs text-gray-500"></i>
-                </button>
+            );
+        };
+
+        // --- 主程式 App ---
+        const App = () => {
+            const [selectedCity, setSelectedCity] = useState(CITIES[0]);
+            const [selectedDistrict, setSelectedDistrict] = useState(CITIES[0].districts[0]);
+            const [activeTab, setActiveTab] = useState("current");
+            const [weather, setWeather] = useState(null);
+            const [loading, setLoading] = useState(false);
+
+            // 初始化與地點改變時更新天氣
+            useEffect(() => {
+                setLoading(true);
+                // 模擬網路請求延遲
+                setTimeout(() => {
+                    setWeather(generateWeatherData(selectedCity.name, selectedDistrict));
+                    setLoading(false);
+                }, 600);
+            }, [selectedCity, selectedDistrict]);
+
+            const handleCityChange = (e) => {
+                const city = CITIES.find(c => c.name === e.target.value);
+                setSelectedCity(city);
+                setSelectedDistrict(city.districts[0]);
+            };
+
+            const handleDistrictChange = (e) => {
+                setSelectedDistrict(e.target.value);
+            };
+
+            const handleGPS = () => {
+                setLoading(true);
+                // 模擬 GPS 定位成功
+                setTimeout(() => {
+                    setSelectedCity(CITIES[5]); // 假設定位到高雄
+                    setSelectedDistrict(CITIES[5].districts[0]);
+                    alert("已定位至目前位置：高雄市 苓雅區");
+                    setLoading(false);
+                }, 1000);
+            };
+
+            return (
+                <div className="flex flex-col min-h-screen pb-safe">
+                    {/* Header: 固定在上方 */}
+                    <header className="sticky top-0 z-50 bg-white shadow-sm">
+                        <div className="flex items-center justify-between px-4 py-3">
+                            <button onClick={handleGPS} className="p-2 rounded-full hover:bg-gray-100 text-blue-600 transition-colors" aria-label="定位">
+                                <Navigation size={20} />
+                            </button>
+                            
+                            <div className="flex space-x-2 flex-1 justify-center max-w-[70%]">
+                                <div className="relative">
+                                    <select 
+                                        value={selectedCity.name} 
+                                        onChange={handleCityChange}
+                                        className="appearance-none bg-gray-100 text-gray-800 font-bold py-1.5 pl-3 pr-8 rounded-lg text-sm border-none focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
+                                    >
+                                        {CITIES.map(city => (
+                                            <option key={city.name} value={city.name}>{city.name}</option>
+                                        ))}
+                                    </select>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                                        <ArrowDown size={14} />
+                                    </div>
+                                </div>
+
+                                <div className="relative">
+                                    <select 
+                                        value={selectedDistrict} 
+                                        onChange={handleDistrictChange}
+                                        className="appearance-none bg-gray-100 text-gray-800 font-bold py-1.5 pl-3 pr-8 rounded-lg text-sm border-none focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
+                                    >
+                                        {selectedCity.districts.map(dist => (
+                                            <option key={dist} value={dist}>{dist}</option>
+                                        ))}
+                                    </select>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                                        <ArrowDown size={14} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 佔位用，保持平衡 */}
+                            <div className="w-9"></div> 
+                        </div>
+
+                        {/* Tabs */}
+                        <div className="flex border-b border-gray-200">
+                            {['current', 'observation', 'forecast'].map((tab) => (
+                                <button
+                                    key={tab}
+                                    onClick={() => setActiveTab(tab)}
+                                    className={`flex-1 py-3 text-sm font-medium transition-colors relative ${
+                                        activeTab === tab ? 'text-blue-600' : 'text-gray-500'
+                                    }`}
+                                >
+                                    {tab === 'current' && '現在'}
+                                    {tab === 'observation' && '觀測'}
+                                    {tab === 'forecast' && '預報'}
+                                    {activeTab === tab && (
+                                        <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-t-full"></div>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+                    </header>
+
+                    {/* Main Content Area */}
+                    <main className="flex-1 bg-gray-50 overflow-hidden relative">
+                        {loading && (
+                            <div className="absolute inset-0 bg-white/80 z-40 flex items-center justify-center">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                            </div>
+                        )}
+                        
+                        {weather && (
+                            <div className="animate-fade-in">
+                                {/* TAB 1: 現在 (Current) */}
+                                {activeTab === 'current' && (
+                                    <div className="pb-8">
+                                        {/* 目前天氣大卡片 */}
+                                        <div className="bg-white p-6 pb-8 text-center relative overflow-hidden shadow-sm">
+                                            <div className="flex flex-col items-center">
+                                                <h2 className="text-gray-500 text-sm mb-1">{selectedCity.name} {selectedDistrict}</h2>
+                                                <div className="flex items-center justify-center space-x-4 my-2">
+                                                    <WeatherIcon type={weather.current.condition} size={64} />
+                                                    <div className="text-7xl font-light tracking-tighter text-gray-800">
+                                                        {weather.current.temp}<span className="text-3xl relative -top-6">°</span>
+                                                    </div>
+                                                </div>
+                                                <p className="text-lg text-gray-700 font-medium mb-3">{weather.current.description}</p>
+                                                
+                                                <div className="flex items-center space-x-6 text-sm">
+                                                    <div className="flex items-center text-red-500 font-medium">
+                                                        <span className="text-xs mr-1">最高</span> {weather.current.high}°
+                                                    </div>
+                                                    <div className="flex items-center text-blue-500 font-medium">
+                                                        <span className="text-xs mr-1">最低</span> {weather.current.low}°
+                                                    </div>
+                                                    <div className="flex items-center text-blue-600">
+                                                        <Umbrella size={14} className="mr-1"/> {weather.current.rainProb}%
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="mt-4">
+                                                    <AQIBadge value={weather.current.aqi} />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* 24小時預報 */}
+                                        <div className="mt-2 bg-white p-4 shadow-sm">
+                                            <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center">
+                                                <span className="w-1 h-4 bg-blue-500 rounded mr-2"></span>
+                                                24 小時預報
+                                            </h3>
+                                            <div className="flex overflow-x-auto no-scrollbar space-x-6 pb-2">
+                                                {weather.hourly.map((hour, idx) => (
+                                                    <div key={idx} className="flex flex-col items-center flex-shrink-0 min-w-[50px]">
+                                                        <span className="text-xs text-gray-500 mb-2">{hour.time}</span>
+                                                        <WeatherIcon type={hour.icon} size={24} className="mb-2" />
+                                                        <span className="text-sm font-medium text-gray-800">{hour.temp}°</span>
+                                                        <div className="mt-1 flex items-center text-[10px] text-blue-500">
+                                                            <Umbrella size={10} className="mr-0.5"/>
+                                                            {hour.rainProb}%
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* AI 氣象助理 */}
+                                        <div className="mt-2 mx-2 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl p-4 text-white shadow-md relative overflow-hidden">
+                                            <div className="absolute top-0 right-0 opacity-10 transform translate-x-4 -translate-y-4">
+                                                <Sparkles size={100} />
+                                            </div>
+                                            <div className="relative z-10">
+                                                <div className="flex items-center mb-2">
+                                                    <div className="bg-white/20 p-1.5 rounded-lg mr-2">
+                                                        <Bot size={18} className="text-white" />
+                                                    </div>
+                                                    <span className="text-xs font-bold uppercase tracking-wider opacity-90">AI 氣象助理</span>
+                                                </div>
+                                                <p className="text-sm font-medium leading-relaxed">
+                                                    {weather.current.aiSummary}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* TAB 2: 觀測 (Observation) */}
+                                {activeTab === 'observation' && (
+                                    <div className="p-2 grid grid-cols-2 gap-2">
+                                        <Card 
+                                            icon={<Droplets className="text-blue-500" />}
+                                            title="降雨機率" 
+                                            value={`${weather.current.rainProb}%`}
+                                            subtext="目前狀態"
+                                        />
+                                        <Card 
+                                            icon={<Wind className="text-teal-500" />}
+                                            title="濕度" 
+                                            value={`${weather.current.humidity}%`}
+                                            subtext="相對濕度"
+                                        />
+                                        <Card 
+                                            icon={<Wind className="text-gray-500" />}
+                                            title="風速" 
+                                            value={`${weather.current.windSpeed} m/s`}
+                                            subtext="微風"
+                                        />
+                                        <Card 
+                                            icon={<Sun className="text-orange-500" />}
+                                            title="紫外線" 
+                                            value={weather.current.uv}
+                                            subtext={weather.current.uv > 7 ? "高危險" : (weather.current.uv > 5 ? "中量" : "低量")}
+                                        />
+                                        <Card 
+                                            icon={<Eye className="text-indigo-500" />}
+                                            title="能見度" 
+                                            value={weather.current.visibility}
+                                            subtext="良好"
+                                        />
+                                        <div className="col-span-2 bg-white rounded-xl p-4 shadow-sm flex justify-between items-center">
+                                            <div className="flex flex-col items-center flex-1 border-r border-gray-100">
+                                                <span className="text-xs text-gray-500 mb-1">日出</span>
+                                                <Sunrise size={24} className="text-orange-400 mb-1" />
+                                                <span className="text-lg font-bold text-gray-800">{weather.current.sunrise}</span>
+                                            </div>
+                                            <div className="flex flex-col items-center flex-1">
+                                                <span className="text-xs text-gray-500 mb-1">日落</span>
+                                                <Sunset size={24} className="text-purple-400 mb-1" />
+                                                <span className="text-lg font-bold text-gray-800">{weather.current.sunset}</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="col-span-2 bg-white rounded-xl p-4 shadow-sm">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="text-sm text-gray-500 font-bold">空氣品質</span>
+                                                <AQIBadge value={weather.current.aqi} />
+                                            </div>
+                                            <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                                <div 
+                                                    className="bg-green-500 h-2.5 rounded-full transition-all duration-500" 
+                                                    style={{ width: `${Math.min(weather.current.aqi, 100)}%` }}
+                                                ></div>
+                                            </div>
+                                            <p className="text-xs text-gray-400 mt-2 text-right">AQI 指數: {weather.current.aqi}</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* TAB 3: 預報 (Forecast) */}
+                                {activeTab === 'forecast' && (
+                                    <div className="bg-white min-h-[calc(100vh-120px)]">
+                                        {weather.daily.map((day, idx) => (
+                                            <div key={idx} className="flex items-center justify-between px-5 py-4 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors">
+                                                <div className="flex flex-col w-16">
+                                                    <span className={`text-sm font-bold ${idx === 0 ? 'text-blue-600' : 'text-gray-800'}`}>{day.day}</span>
+                                                    <span className="text-xs text-gray-400">{day.date}</span>
+                                                </div>
+                                                
+                                                <div className="flex flex-col items-center w-12">
+                                                    <WeatherIcon type={day.icon} size={28} />
+                                                    <div className="flex items-center text-[10px] text-blue-500 mt-1 font-bold">
+                                                        {day.rainProb}%
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center space-x-4 flex-1 justify-end">
+                                                    <div className="flex flex-col items-end w-12">
+                                                        <span className="text-lg font-medium text-red-500">{day.high}°</span>
+                                                    </div>
+                                                    
+                                                    {/* 視覺化的溫度條 (簡化版) */}
+                                                    <div className="w-16 h-1 bg-gray-200 rounded-full relative hidden sm:block">
+                                                        <div className="absolute left-0 top-0 h-full bg-gradient-to-r from-blue-300 to-red-300 rounded-full" style={{width: '60%', left: '20%'}}></div>
+                                                    </div>
+
+                                                    <div className="flex flex-col items-end w-12">
+                                                        <span className="text-lg font-medium text-blue-500">{day.low}°</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        };
+
+        // --- 小元件: 觀測卡片 ---
+        const Card = ({ icon, title, value, subtext }) => (
+            <div className="bg-white rounded-xl p-4 shadow-sm flex flex-col justify-between h-32">
+                <div className="flex items-start justify-between">
+                    <span className="text-sm text-gray-500 font-bold">{title}</span>
+                    <div className="p-1.5 bg-gray-50 rounded-lg">{icon}</div>
+                </div>
+                <div>
+                    <div className="text-2xl font-bold text-gray-800 tracking-tight">{value}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">{subtext}</div>
+                </div>
             </div>
+        );
 
-            <!-- Navigation Tabs -->
-            <nav class="flex justify-around text-gray-500 text-sm border-b border-gray-200">
-                <button onclick="switchTab('now')" id="nav-now" class="nav-item active flex-1 py-3 text-center transition-all">
-                    現在
-                </button>
-                <button onclick="switchTab('observation')" id="nav-observation" class="nav-item flex-1 py-3 text-center transition-all">
-                    觀測
-                </button>
-                <button onclick="switchTab('forecast')" id="nav-forecast" class="nav-item flex-1 py-3 text-center transition-all">
-                    預報
-                </button>
-            </nav>
-        </header>
-
-        <!-- Main Content Area -->
-        <main class="pb-10 relative">
-
-            <!-- TAB 1: 現在 (Now) -->
-            <section id="tab-now" class="tab-content active px-4 pt-6">
-                <!-- Main Temperature Area -->
-                <div class="text-center mb-6">
-                    <div class="text-gray-500 text-sm mb-1" id="current-date">--月--日</div>
-                    <div class="flex justify-center items-start">
-                        <span class="text-8xl font-light tracking-tighter" id="current-temp">--</span>
-                        <span class="text-3xl mt-4 font-light">°C</span>
-                    </div>
-                    
-                    <div class="flex justify-center items-center gap-4 mt-2 text-lg font-medium">
-                        <span class="text-y-red">H: <span id="today-high">--</span>°</span>
-                        <span class="text-gray-300">|</span>
-                        <span class="text-y-blue">L: <span id="today-low">--</span>°</span>
-                    </div>
-
-                    <div class="flex justify-center items-center gap-3 mt-4">
-                        <span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-                            <i class="fa-solid fa-umbrella"></i> <span id="current-rain">--%</span>
-                        </span>
-                        <span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-                            AQI <span id="current-aqi">-- 良好</span>
-                        </span>
-                    </div>
-                </div>
-
-                <!-- AI Weather Assistant -->
-                <div class="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-4 border border-blue-100 shadow-sm flex items-start gap-3">
-                    <div class="bg-white p-2 rounded-full shadow-sm text-blue-500">
-                        <i class="fa-solid fa-robot"></i>
-                    </div>
-                    <div>
-                        <h3 class="text-xs font-bold text-blue-800 mb-1">AI 氣象助理</h3>
-                        <p class="text-sm text-gray-700 font-medium leading-relaxed" id="ai-summary">
-                            <!-- JS will inject text here -->
-                            資料讀取中...
-                        </p>
-                    </div>
-                </div>
-                
-                <!-- Advertisement placeholder (simulating Yahoo style) -->
-                <div class="mt-8 h-24 bg-gray-100 rounded-lg flex items-center justify-center text-gray-300 text-xs border border-dashed border-gray-300">
-                    廣告區域
-                </div>
-            </section>
-
-
-            <!-- TAB 2: 觀測 (Observation) -->
-            <section id="tab-observation" class="tab-content px-4 pt-6">
-                <h2 class="text-lg font-bold mb-4 border-l-4 border-y-red pl-3">詳細觀測數據</h2>
-                
-                <div class="grid grid-cols-2 gap-3">
-                    <!-- Cards -->
-                    <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-between h-32">
-                        <div class="text-gray-400 text-xs"><i class="fa-solid fa-droplet text-blue-400 mr-1"></i> 降雨機率</div>
-                        <div class="text-2xl font-bold mt-1" id="obs-rain-prob">--<span class="text-sm">%</span></div>
-                        <div class="text-xs text-gray-500">氣象署預報</div>
-                    </div>
-
-                    <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-between h-32">
-                        <div class="text-gray-400 text-xs"><i class="fa-solid fa-water text-cyan-400 mr-1"></i> 相對濕度</div>
-                        <div class="text-2xl font-bold mt-1" id="obs-humidity">--<span class="text-sm">%</span></div>
-                        <div class="text-xs text-gray-500">即時觀測</div>
-                    </div>
-
-                    <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-between h-32">
-                        <div class="text-gray-400 text-xs"><i class="fa-solid fa-wind text-gray-400 mr-1"></i> 風速</div>
-                        <div class="text-2xl font-bold mt-1" id="obs-wind">--<span class="text-sm">m/s</span></div>
-                        <div class="text-xs text-gray-500">即時觀測</div>
-                    </div>
-
-                    <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-between h-32">
-                        <div class="text-gray-400 text-xs"><i class="fa-solid fa-sun text-y-orange mr-1"></i> 紫外線</div>
-                        <div class="text-2xl font-bold mt-1 text-y-orange" id="obs-uv">--</div>
-                        <div class="text-xs text-gray-500">觀測/預測</div>
-                    </div>
-
-                    <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-between h-32">
-                        <div class="text-gray-400 text-xs"><i class="fa-solid fa-eye text-indigo-400 mr-1"></i> 能見度</div>
-                        <div class="text-2xl font-bold mt-1">--<span class="text-sm">km</span></div>
-                        <div class="text-xs text-gray-500">視野良好</div>
-                    </div>
-
-                    <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-between h-32">
-                        <div class="text-gray-400 text-xs"><i class="fa-regular fa-clock text-y-red mr-1"></i> 日出/日落</div>
-                        <div class="flex justify-between items-end mt-2">
-                            <div class="text-center">
-                                <div class="text-xs text-gray-400">日出</div>
-                                <div class="font-bold">05:40</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="text-xs text-gray-400">日落</div>
-                                <div class="font-bold">18:25</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-
-            <!-- TAB 3: 預報 (Forecast) -->
-            <section id="tab-forecast" class="tab-content px-0 pt-6">
-                
-                <!-- 24 Hours Forecast -->
-                <div class="px-4 mb-2 flex justify-between items-end">
-                    <h2 class="text-lg font-bold border-l-4 border-y-red pl-3">24小時預報</h2>
-                    <span class="text-xs text-gray-400">每3小時</span>
-                </div>
-                
-                <div class="overflow-x-auto hide-scrollbar pb-6 px-4">
-                    <div class="flex space-x-4 w-max" id="hourly-forecast-container">
-                        <!-- JS generated content will go here -->
-                        <div class="text-sm text-gray-500 py-4">載入中...</div>
-                    </div>
-                </div>
-
-                <div class="h-2 bg-gray-100 mb-6"></div>
-
-                <!-- 7 Days Forecast -->
-                <div class="px-4">
-                    <h2 class="text-lg font-bold mb-4 border-l-4 border-y-red pl-3">未來 7 天預報</h2>
-                    
-                    <div class="flex flex-col divide-y divide-gray-100" id="weekly-forecast-container">
-                         <!-- JS generated content -->
-                         <div class="text-sm text-gray-500 py-4">載入中...</div>
-                    </div>
-                </div>
-
-                <div class="mt-8 mb-4 text-center text-xs text-gray-400">
-                    資料來源：交通部中央氣象署 (CWA)
-                </div>
-            </section>
-
-        </main>
-    </div>
-
-    <!-- JavaScript Implementation -->
-    <script>
-        // ==========================================
-        // SETTINGS & CONFIG
-        // ==========================================
-        
-        // ★★★ 請在此填入您的中央氣象署 API KEY ★★★
-        const CWA_API_KEY = 'CWA-3B93D2DF-86A5-4FD0-BF63-8FC685B193D6'; 
-        
-        // 城市與氣象站對應表 (用於 API 查詢)
-        // 注意：不同 API endpoint 對地名的稱呼可能略有不同
-        const LOCATION_MAP = {
-            "Kaohsiung": { name: "高雄市", stationName: "高雄" },
-            "Taipei": { name: "臺北市", stationName: "臺北" },
-            "NewTaipei": { name: "新北市", stationName: "板橋" }, // 新北通常取板橋站為代表
-            "Taichung": { name: "臺中市", stationName: "臺中" },
-            "Tainan": { name: "臺南市", stationName: "臺南" },
-            "Hualien": { name: "花蓮縣", stationName: "花蓮" }
-        };
-
-        // ==========================================
-        // 1. Data Logic (Hybrid: Real API + Mock Fallback)
-        // ==========================================
-        
-        // 模擬數據 (Fallback)
-        const mockWeatherData = {
-            "Kaohsiung": { current: { temp: 31, high: 33, low: 27, rain: 20, aqi: 45, aqiText: "良好", uv: 8, hum: 78, wind: 3.2 }, aiSummary: "(模擬) 今日多雲悶熱，午後山區有局部短暫陣雨。" },
-            "Taipei": { current: { temp: 28, high: 30, low: 24, rain: 60, aqi: 55, aqiText: "普通", uv: 4, hum: 85, wind: 5.1 }, aiSummary: "(模擬) 受東北季風影響，整日陰雨綿綿，氣溫轉涼。" },
-            "NewTaipei": { current: { temp: 27, high: 29, low: 23, rain: 70, aqi: 50, aqiText: "良好", uv: 3, hum: 88, wind: 4.5 }, aiSummary: "(模擬) 陰有雨，出門記得攜帶雨具，早晚偏涼。" },
-            "Taichung": { current: { temp: 30, high: 32, low: 25, rain: 10, aqi: 85, aqiText: "普通", uv: 7, hum: 70, wind: 2.8 }, aiSummary: "(模擬) 晴朗穩定，紫外線強烈，空氣品質普通。" },
-            "Tainan": { current: { temp: 31, high: 33, low: 26, rain: 10, aqi: 60, aqiText: "普通", uv: 8, hum: 75, wind: 3.0 }, aiSummary: "(模擬) 天氣炎熱，午後有零星陣雨機率，多補充水分。" },
-            "Hualien": { current: { temp: 29, high: 31, low: 24, rain: 40, aqi: 30, aqiText: "良好", uv: 6, hum: 80, wind: 4.0 }, aiSummary: "(模擬) 多雲時陰，迎風面偶有雨，海邊活動請注意。" }
-        };
-
-        async function getWeatherData(locKey) {
-            const loadingEl = document.getElementById('loading-overlay');
-            loadingEl.style.display = 'flex';
-
-            let resultData = null;
-
-            if (CWA_API_KEY && CWA_API_KEY.length > 5) {
-                try {
-                    console.log("Fetching from CWA API...");
-                    const apiData = await fetchFromCWA(locKey);
-                    resultData = apiData;
-                } catch (e) {
-                    console.error("API Fetch Error:", e);
-                    alert("API 讀取失敗，將切換為模擬資料。\n請檢查 Console 錯誤訊息或 API Key。");
-                    resultData = getMockData(locKey);
-                }
-            } else {
-                // No API Key, use Mock
-                console.log("No API Key provided, using Mock Data.");
-                resultData = getMockData(locKey);
-            }
-
-            loadingEl.style.display = 'none';
-            return resultData;
-        }
-
-        // --- Mock Data Generator ---
-        function getMockData(locKey) {
-            const basic = mockWeatherData[locKey];
-            return {
-                name: LOCATION_MAP[locKey].name,
-                current: basic.current,
-                aiSummary: basic.aiSummary,
-                hourly: generateHourlyData(basic.current.temp), // Mock function
-                daily: generateDailyData(basic.current.high, basic.current.low) // Mock function
-            };
-        }
-
-        // --- Real API Fetcher ---
-        async function fetchFromCWA(locKey) {
-            const locInfo = LOCATION_MAP[locKey];
-            
-            // 1. Fetch Current Observation (O-A0003-001)
-            // 局屬氣象站-現在天氣觀測報告
-            const obsUrl = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=${CWA_API_KEY}&StationName=${encodeURIComponent(locInfo.stationName)}`;
-            const obsRes = await fetch(obsUrl);
-            const obsJson = await obsRes.json();
-            const stationData = obsJson.records.Station[0]; // Assume first match is correct
-            
-            // Parse Observation
-            const temp = Math.round(stationData.WeatherElement.AirTemperature);
-            const hum = stationData.WeatherElement.RelativeHumidity;
-            const wind = stationData.WeatherElement.WindSpeed;
-            // Note: O-A0003-001 doesn't always have Rainfall/UV directly in simple fields, simplifying for demo
-            
-            // 2. Fetch Forecast (F-C0032-001) - 36 Hours (Good for PoP, High/Low Temp)
-            // 一般天氣預報-今明36小時天氣預報
-            const fcUrl = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${CWA_API_KEY}&locationName=${encodeURIComponent(locInfo.name)}`;
-            const fcRes = await fetch(fcUrl);
-            const fcJson = await fcRes.json();
-            const locationData = fcJson.records.location[0];
-            
-            // Helper to get element value by name
-            const getEl = (name) => locationData.weatherElement.find(e => e.elementName === name).time[0].parameter;
-            
-            const pop = getEl('PoP').parameterName; // Probability of Precipitation
-            const minT = getEl('MinT').parameterName;
-            const maxT = getEl('MaxT').parameterName;
-            const wx = getEl('Wx').parameterName; // Weather Description
-
-            // Combine Data
-            const currentData = {
-                temp: temp,
-                high: maxT,
-                low: minT,
-                rain: pop,
-                aqi: 50, // API doesn't provide AQI in this endpoint, keeping mock/static
-                aqiText: "普通",
-                uv: 6, // API doesn't provide UV easily here, keeping mock
-                hum: hum,
-                wind: wind
-            };
-
-            return {
-                name: locInfo.name,
-                current: currentData,
-                aiSummary: generateRuleBasedSummary(locInfo.name, wx, temp, pop),
-                // For a full app, we would parse F-D0047-091 for hourly/daily. 
-                // For this demo, we will use the Forecast 36H to fill the "Hourly" slot partially 
-                // and fallback to mock generator for the full 7-day to prevent code explosion.
-                hourly: generateHourlyData(temp, pop > 50), 
-                daily: generateDailyData(maxT, minT, pop > 50)
-            };
-        }
-
-        // Rule-based AI Summary Generator (前端簡易版 AI)
-        function generateRuleBasedSummary(city, wx, temp, rain) {
-            let msg = `${city}今日${wx}。`;
-            if (temp >= 30) msg += "氣溫偏高，請注意防曬多喝水。";
-            else if (temp <= 20) msg += "氣溫轉涼，請適時添加衣物。";
-            else msg += "氣溫舒適，適合戶外活動。";
-            
-            if (rain >= 50) msg += " 降雨機率高，出門請記得帶傘。";
-            return msg;
-        }
-
-        // --- Helper Generators (Mock/Fillers) ---
-        // (保持原有的輔助函數，用於填補 API 未提供的長天期/小時數據)
-        function generateHourlyData(baseTemp, isRainy = false) {
-            let data = [];
-            let currentHour = new Date().getHours();
-            baseTemp = parseInt(baseTemp);
-            
-            for(let i=0; i<24; i++) {
-                let h = (currentHour + i) % 24;
-                let displayH = h.toString().padStart(2, '0') + ":00";
-                let tempChange = 0;
-                if(h >= 10 && h <= 15) tempChange = 2;
-                else if (h >= 0 && h <= 5) tempChange = -3;
-                
-                let icon = isRainy ? 'fa-cloud-rain text-blue-400' : ((h>=6 && h<=18)? 'fa-sun text-y-orange' : 'fa-moon text-indigo-300');
-                
-                // Random variation to make charts look alive
-                let val = baseTemp + tempChange + Math.floor(Math.random()*2);
-                
-                data.push({
-                    time: displayH,
-                    temp: val,
-                    icon: icon,
-                    rainProb: isRainy ? 50 + Math.floor(Math.random()*40) : Math.floor(Math.random()*20)
-                });
-            }
-            return data;
-        }
-
-        function generateDailyData(highBase, lowBase, isRainy = false) {
-            let data = [];
-            let days = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
-            let today = new Date().getDay();
-            highBase = parseInt(highBase);
-            lowBase = parseInt(lowBase);
-            
-            for(let i=0; i<7; i++) {
-                let dIndex = (today + i) % 7;
-                let dateObj = new Date();
-                dateObj.setDate(dateObj.getDate() + i);
-                let dateStr = (dateObj.getMonth()+1) + "/" + dateObj.getDate();
-                
-                let icon = 'fa-sun text-y-orange';
-                let rain = 10;
-                
-                if(isRainy || Math.random() > 0.6) {
-                    icon = 'fa-cloud-rain text-blue-400';
-                    rain = 50 + Math.floor(Math.random()*40);
-                } else if (Math.random() > 0.4) {
-                    icon = 'fa-cloud-sun text-gray-400';
-                    rain = 20;
-                }
-
-                data.push({
-                    date: dateStr,
-                    day: i===0 ? '今天' : days[dIndex],
-                    high: highBase + Math.floor(Math.random()*3 - 1),
-                    low: lowBase + Math.floor(Math.random()*3 - 1),
-                    icon: icon,
-                    rainProb: rain
-                });
-            }
-            return data;
-        }
-
-
-        // ==========================================
-        // 2. App Logic (UI Rendering)
-        // ==========================================
-
-        const locationSelect = document.getElementById('location-select');
-        let currentLocation = "Kaohsiung"; // Default
-
-        // 初始化
-        document.addEventListener('DOMContentLoaded', () => {
-            updateDate();
-            loadAndRender(currentLocation);
-        });
-
-        // 監聽地點變更
-        locationSelect.addEventListener('change', (e) => {
-            currentLocation = e.target.value;
-            loadAndRender(currentLocation);
-            window.scrollTo({top: 0, behavior: 'smooth'});
-        });
-
-        async function loadAndRender(locKey) {
-            // Fetch Data (API or Mock)
-            const data = await getWeatherData(locKey);
-            if(data) renderData(data);
-        }
-
-        // 頁籤切換邏輯
-        function switchTab(tabId) {
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            document.getElementById(`nav-${tabId}`).classList.add('active');
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            document.getElementById(`tab-${tabId}`).classList.add('active');
-        }
-
-        function getUserLocation() {
-            alert("正在使用 GPS 定位... \n(模擬切換至臺北市)");
-            locationSelect.value = "Taipei";
-            locationSelect.dispatchEvent(new Event('change'));
-        }
-
-        function updateDate() {
-            const now = new Date();
-            const str = `${now.getMonth()+1}月${now.getDate()}日 ${['週日','週一','週二','週三','週四','週五','週六'][now.getDay()]}`;
-            document.getElementById('current-date').innerText = str;
-        }
-
-        // 核心渲染函式 (Input: Normalized Data Object)
-        function renderData(data) {
-            // --- Tab 1: Now ---
-            document.getElementById('current-temp').innerText = data.current.temp;
-            document.getElementById('today-high').innerText = data.current.high;
-            document.getElementById('today-low').innerText = data.current.low;
-            document.getElementById('current-rain').innerText = data.current.rain + '%';
-            document.getElementById('current-aqi').innerText = `${data.current.aqi} ${data.current.aqiText}`;
-            document.getElementById('ai-summary').innerText = data.aiSummary;
-
-            // --- Tab 2: Observation ---
-            document.getElementById('obs-rain-prob').innerHTML = `${data.current.rain}<span class="text-sm">%</span>`;
-            document.getElementById('obs-humidity').innerHTML = `${data.current.hum}<span class="text-sm">%</span>`;
-            document.getElementById('obs-wind').innerHTML = `${data.current.wind}<span class="text-sm">m/s</span>`;
-            
-            const uvEl = document.getElementById('obs-uv');
-            uvEl.innerText = data.current.uv;
-            if(data.current.uv >= 8) uvEl.className = "text-2xl font-bold mt-1 text-purple-600";
-            else if(data.current.uv >= 6) uvEl.className = "text-2xl font-bold mt-1 text-y-orange";
-            else uvEl.className = "text-2xl font-bold mt-1 text-green-500";
-
-            // --- Tab 3: Forecast ---
-            
-            // 24H Forecast Render
-            const hourlyContainer = document.getElementById('hourly-forecast-container');
-            hourlyContainer.innerHTML = '';
-            data.hourly.forEach(h => {
-                const html = `
-                    <div class="flex flex-col items-center min-w-[3.5rem] snap-center">
-                        <span class="text-xs text-gray-500 mb-2">${h.time}</span>
-                        <i class="fa-solid ${h.icon} text-xl mb-2"></i>
-                        <span class="text-lg font-bold">${h.temp}°</span>
-                        <span class="text-[10px] text-blue-500 mt-1 font-bold"><i class="fa-solid fa-umbrella text-[8px]"></i> ${h.rainProb}%</span>
-                    </div>
-                `;
-                hourlyContainer.innerHTML += html;
-            });
-
-            // Weekly Forecast Render
-            const weeklyContainer = document.getElementById('weekly-forecast-container');
-            weeklyContainer.innerHTML = '';
-            data.daily.forEach(d => {
-                const html = `
-                    <div class="flex items-center justify-between py-3">
-                        <div class="w-20 text-sm">
-                            <div class="font-bold text-gray-700">${d.day}</div>
-                            <div class="text-xs text-gray-400">${d.date}</div>
-                        </div>
-                        <div class="flex-1 flex justify-center">
-                            <i class="fa-solid ${d.icon} text-xl"></i>
-                        </div>
-                        <div class="w-16 text-center text-xs text-blue-500 font-bold bg-blue-50 rounded py-1">
-                            ${d.rainProb}%
-                        </div>
-                        <div class="w-24 text-right flex justify-end gap-2 text-sm font-bold">
-                            <span class="text-y-red">${d.high}°</span>
-                            <span class="text-gray-300">/</span>
-                            <span class="text-y-blue">${d.low}°</span>
-                        </div>
-                    </div>
-                `;
-                weeklyContainer.innerHTML += html;
-            });
-        }
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>
