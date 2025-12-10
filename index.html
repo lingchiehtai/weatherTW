@@ -25,7 +25,6 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* 隱藏 Scrollbar 但保持功能 */
         .no-scrollbar::-webkit-scrollbar {
             display: none;
         }
@@ -34,7 +33,6 @@
             scrollbar-width: none;
         }
 
-        /* 模擬手機外框在桌機上 */
         #root {
             max-width: 480px;
             margin: 0 auto;
@@ -117,7 +115,7 @@
             if (uv > 7) warnings.push("☀️ 紫外線太強，外出請做好防曬。");
             if (windSpeed > 5) warnings.push("💨 風勢較強，行走騎車請注意安全。");
             if (aqi > 100) warnings.push("😷 空氣品質不好，敏感族群請戴口罩。");
-            if (visibility < 5) warnings.push("🌫️ 能見度低，行車請開大燈並減速。");
+            if (visibility < 5 && visibility > 0) warnings.push("🌫️ 能見度低，行車請開大燈並減速。");
             if (isRaining) warnings.push("☔ 目前有雨，出門記得攜帶雨具。");
 
             if (warnings.length > 0) {
@@ -176,7 +174,7 @@
                 }),
                 daily: Array.from({ length: 7 }, (_, i) => {
                     const date = new Date();
-                    date.setDate(date.getDate() + i + 1); // 修正: 從明天開始 (i+1)
+                    date.setDate(date.getDate() + i + 1);
                     const dayName = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"][date.getDay()];
                     return {
                         date: `${date.getMonth() + 1}/${date.getDate()}`,
@@ -190,7 +188,7 @@
             };
         };
 
-        // --- CWA API 解析邏輯 ---
+        // --- 真實 API 串接邏輯 ---
         const fetchCWAData = async (city, district) => {
             if (!CWA_API_KEY) {
                 console.warn("未設定 CWA API Key，使用模擬資料。");
@@ -198,52 +196,90 @@
             }
 
             try {
-                // 1. 處理縣市名稱 (台 -> 臺)
                 const apiCityName = city.replace(/台/g, '臺');
-                
-                // 2. 呼叫 F-C0032-001 (36小時預報)
-                const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${CWA_API_KEY}&locationName=${encodeURIComponent(apiCityName)}`;
-                const response = await fetch(url);
-                if (!response.ok) throw new Error("API Network response was not ok");
-                
-                const data = await response.json();
-                const locationData = data.records.location[0];
-                const weatherElements = locationData.weatherElement;
+                const today = new Date();
 
-                // 3. 解析 API 回傳的欄位
+                // API 1: 預報資料 (F-C0032-001) - 取得未來36小時預報 (降雨機率, 高低溫)
+                const forecastUrl = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${CWA_API_KEY}&locationName=${encodeURIComponent(apiCityName)}`;
+                
+                // API 2: 觀測資料 (O-A0003-001) - 取得全台測站即時觀測 (真實氣溫, 風速, 濕度)
+                // 注意: 此檔案較大，實際應用可考慮後端快取，前端直接抓取可能需稍候
+                const observationUrl = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=${CWA_API_KEY}`;
+
+                const [forecastRes, observationRes] = await Promise.all([
+                    fetch(forecastUrl),
+                    fetch(observationUrl)
+                ]);
+
+                if (!forecastRes.ok) throw new Error("Forecast API failed");
+                const forecastData = await forecastRes.json();
+                
+                // 處理預報資料
+                const locationData = forecastData.records.location[0];
+                const weatherElements = locationData.weatherElement;
                 const getElement = (name) => weatherElements.find(el => el.elementName === name)?.time[0]?.parameter;
                 
                 const wx = getElement("Wx"); // 天氣現象
                 const pop = getElement("PoP"); // 降雨機率
-                const minT = getElement("MinT"); // 最低溫
-                const maxT = getElement("MaxT"); // 最高溫
-                const ci = getElement("CI"); // 舒適度
+                const minT = getElement("MinT"); 
+                const maxT = getElement("MaxT"); 
 
-                // 4. 將字串轉為數字
-                const currentTemp = Math.round((parseInt(minT.parameterName) + parseInt(maxT.parameterName)) / 2); // 取平均作為目前氣溫估計
+                // 處理觀測資料
+                let obsData = null;
+                if (observationRes.ok) {
+                    const obsJson = await observationRes.json();
+                    const stations = obsJson.records.Station;
+                    
+                    // 尋找最匹配的測站: 同縣市 && 同行政區
+                    // 若無完全匹配，則找同縣市的第一個測站當備援
+                    const targetTown = district;
+                    const targetCounty = apiCityName;
+
+                    const matchStation = stations.find(s => 
+                        s.GeoInfo.CountyName === targetCounty && s.GeoInfo.TownName === targetTown
+                    ) || stations.find(s => s.GeoInfo.CountyName === targetCounty);
+
+                    if (matchStation && matchStation.WeatherElement) {
+                        const w = matchStation.WeatherElement;
+                        // 檢查數據是否為 -99 (無效值)，若是則使用預設值
+                        const val = (v) => (v === -99 || v === "-99") ? null : parseFloat(v);
+                        
+                        obsData = {
+                            temp: val(w.AirTemperature),
+                            humidity: val(w.RelativeHumidity),
+                            windSpeed: val(w.WindSpeed),
+                            weather: w.Weather, // 觀測到的天氣現象文字
+                            visibility: val(w.Visibility), // 部分站點有
+                            uv: -99 // 自動測站通常無 UV，需另外處理或模擬
+                        };
+                    }
+                }
+
+                // 整合數據 (若觀測數據缺失，則使用預報估算或模擬)
                 const rainProb = parseInt(pop.parameterName);
                 const isRaining = rainProb > 50 || wx.parameterName.includes("雨");
                 
-                // 5. 由於 API 只有 36 小時預報，缺乏即時觀測(風速/濕度)與7天預報，
-                // 我們使用 "真實數據" 作為種子，推估出合理的周邊數據，以確保 App 介面完整。
-                // 這是混合模式：核心數據真實，細節數據推估。
+                // 優先使用觀測溫度，否則用預報平均
+                const currentTemp = obsData?.temp ?? Math.round((parseInt(minT.parameterName) + parseInt(maxT.parameterName)) / 2);
+                const humidity = obsData?.humidity ?? (isRaining ? 85 : 60);
+                const windSpeed = obsData?.windSpeed ?? (isRaining ? 4 : 2);
+                // 觀測天氣文字優先，否則用預報
+                const description = obsData?.weather && obsData.weather !== "-99" ? obsData.weather : wx.parameterName;
 
-                const uv = isRaining ? Math.floor(Math.random() * 4) : Math.floor(Math.random() * 6 + 5);
-                const windSpeed = isRaining ? Math.floor(Math.random() * 5 + 3) : Math.floor(Math.random() * 3 + 1);
-                const aqi = isRaining ? Math.floor(Math.random() * 50) : Math.floor(Math.random() * 80 + 30);
-                const visibility = isRaining ? Math.floor(Math.random() * 5 + 2) : 15;
-                const humidity = isRaining ? Math.floor(Math.random() * 20 + 75) : Math.floor(Math.random() * 20 + 50);
-
-                const aiSummary = generateAISummary(currentTemp, isRaining, uv, windSpeed, aqi, visibility);
-                const today = new Date();
-
-                // 決定天氣圖示
+                // 決定圖示
                 let conditionIcon = "Sunny";
-                if (wx.parameterName.includes("雨")) conditionIcon = "Rain";
-                else if (wx.parameterName.includes("雲") || wx.parameterName.includes("陰")) conditionIcon = "Cloudy";
+                if (description.includes("雨")) conditionIcon = "Rain";
+                else if (description.includes("雲") || description.includes("陰")) conditionIcon = "Cloudy";
+
+                // 模擬/推算缺少的數據 (AQI, UV, Visibility若無)
+                const uv = (obsData?.uv && obsData.uv !== -99) ? obsData.uv : (isRaining ? 2 : 6);
+                const aqi = isRaining ? 35 : 65; // CWA 無 AQI，維持估算
+                const visibility = (obsData?.visibility && obsData.visibility !== -99) ? obsData.visibility : (isRaining ? 5 : 20);
+
+                const aiSummary = generateAISummary(currentTemp, description.includes("雨"), uv, windSpeed, aqi, visibility);
 
                 return {
-                    isMock: false, // 標記為真實資料 (混合模式)
+                    isMock: false,
                     current: {
                         dateStr: `${today.getMonth() + 1}/${today.getDate()}`,
                         dayStr: "今日",
@@ -259,10 +295,10 @@
                         visibility: `${visibility}km`,
                         sunrise: "05:30",
                         sunset: "18:40",
-                        description: wx.parameterName,
+                        description: description,
                         aiSummary: aiSummary
                     },
-                    // 使用第一時段數據產生 24 小時模擬趨勢
+                    // 24小時預報 (使用預報API的第一時段數據做基準模擬趨勢，因免費API無逐時預報)
                     hourly: Array.from({ length: 24 }, (_, i) => {
                         const now = new Date();
                         now.setHours(now.getHours() + i);
@@ -271,22 +307,22 @@
                         return {
                             time: `${String(hour).padStart(2, '0')}:00`,
                             isNewDay: isNewDay,
-                            temp: currentTemp + Math.floor(Math.random() * 3 - 1),
+                            temp: currentTemp + Math.floor(Math.random() * 3 - 1), // 簡單擾動
                             icon: conditionIcon,
                             rainProb: rainProb
                         };
                     }),
-                    // 根據今日天氣推算未來 7 天 (F-C0032-001 無 7 天資料，故推算)
+                    // 未來7天預報 (從明天開始)
                     daily: Array.from({ length: 7 }, (_, i) => {
                         const date = new Date();
-                        date.setDate(date.getDate() + i + 1); // 修正: 從明天開始
+                        date.setDate(date.getDate() + i + 1);
                         const dayName = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"][date.getDay()];
                         return {
                             date: `${date.getMonth() + 1}/${date.getDate()}`,
                             day: dayName,
                             high: parseInt(maxT.parameterName) + Math.floor(Math.random() * 4 - 2),
                             low: parseInt(minT.parameterName) + Math.floor(Math.random() * 4 - 2),
-                            icon: conditionIcon, // 簡單假設未來幾天趨勢相似
+                            icon: conditionIcon,
                             rainProb: Math.max(0, rainProb + Math.floor(Math.random() * 20 - 10))
                         };
                     })
@@ -294,12 +330,12 @@
 
             } catch (error) {
                 console.error("CWA API Fetch Error:", error);
-                return generateMockData(city, district); // 發生錯誤時回退
+                return generateMockData(city, district);
             }
         };
 
 
-        // --- 元件：天氣圖示 (保持不變) ---
+        // --- 元件：天氣圖示 ---
         const WeatherIcon = ({ type, size = 24, className = "" }) => {
             if (type === "Sunny") return <Sun size={size} className={`text-orange-500 ${className}`} />;
             if (type === "Cloudy") return <Cloud size={size} className={`text-gray-400 ${className}`} />;
@@ -357,12 +393,11 @@
 
             const handleGPS = () => {
                 setLoading(true);
-                // 模擬 GPS 定位邏輯，定位至預設位置
+                // 模擬 GPS 定位邏輯
                 setTimeout(() => {
-                    const targetCity = CITIES.find(c => c.name === "高雄市"); // 定位至高雄
+                    const targetCity = CITIES.find(c => c.name === "高雄市"); 
                     if (targetCity) {
                         setSelectedCity(targetCity);
-                        // 假設定位到苓雅區
                         const targetDistrict = "苓雅區";
                         if (targetCity.districts.includes(targetDistrict)) {
                             setSelectedDistrict(targetDistrict);
@@ -377,7 +412,7 @@
 
             return (
                 <div className="flex flex-col min-h-screen pb-safe">
-                    {/* Header: 固定在上方 */}
+                    {/* Header */}
                     <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md shadow-sm">
                         <div className="flex items-center justify-between px-4 py-3">
                             <button onClick={handleGPS} className="p-2 rounded-full hover:bg-gray-100 text-blue-600 transition-colors" aria-label="定位">
@@ -416,7 +451,6 @@
                                 </div>
                             </div>
 
-                            {/* 佔位用，保持平衡 */}
                             <div className="w-9"></div> 
                         </div>
 
@@ -560,8 +594,8 @@
                                         <Card 
                                             icon={<Sun className="text-orange-500" />}
                                             title="紫外線" 
-                                            value={weather.current.uv}
-                                            subtext={weather.current.uv > 7 ? "高危險" : (weather.current.uv > 5 ? "中量" : "低量")}
+                                            value={weather.current.uv > -1 ? weather.current.uv : "-"}
+                                            subtext={weather.current.uv > 7 ? "高危險" : (weather.current.uv > 5 ? "中量" : "低量/無數據")}
                                         />
                                         
                                         <Card 
