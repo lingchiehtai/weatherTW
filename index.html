@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>台灣氣象助手 (Taiwan Weather)</title>
+    <title>台灣氣象助理 (Taiwan Weather)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -39,17 +39,15 @@
             max-width: 480px;
             margin: 0 auto;
             min-height: 100vh;
-            background-color: #ffffff;
+            /* 海景風漸層背景：淡青色 -> 極淡藍 -> 白 */
+            background: linear-gradient(180deg, #E0F7FA 0%, #F0F9FF 50%, #FFFFFF 100%);
             box-shadow: 0 0 20px rgba(0,0,0,0.1);
             position: relative;
         }
 
-        /* Yahoo JP 風格的漸層背景 */
-        .bg-yahoo-blue {
-            background: linear-gradient(180deg, #4a90e2 0%, #ffffff 100%);
-        }
+        /* Yahoo JP 風格的漸層背景 (已改為上方全域背景，此處保留類別供相容) */
         .bg-yahoo-gray {
-            background: #f5f6f7;
+            background: rgba(255, 255, 255, 0.5); /* 半透明以透出背景 */
         }
         
         @keyframes fadeIn {
@@ -69,7 +67,7 @@
 
         // --- CWA API 設定 ---
         // 請在此填入您的中央氣象署 API Key
-        const CWA_API_KEY = 'CWA-3B93D2DF-86A5-4FD0-BF63-8FC685B193D6'; 
+        const CWA_API_KEY = "CWA-3B93D2DF-86A5-4FD0-BF63-8FC685B193D6"; 
 
         // --- 內嵌 SVG 圖標元件 (解決 Lucide CDN 相容性問題) ---
         
@@ -101,35 +99,41 @@
         const Eye = (p) => <Icon {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></Icon>;
         const Sunrise = (p) => <Icon {...p}><path d="M12 2v8"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m8 6 4-4 4 4"/><path d="M16 18a4 4 0 0 0-8 0"/></Icon>;
         const Sunset = (p) => <Icon {...p}><path d="M12 10V2"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m16 6-4 4-4-4"/><path d="M16 18a4 4 0 0 0-8 0"/></Icon>;
-        const Sparkles = (p) => <Icon {...p}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 3v4"/><path d="M3 5h4"/><path d="M3 9h4"/></Icon>;
+        const Sparkles = (p) => <Icon {...p}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 3v4"/><path d="M3 5h4"/><path d="M3 9h4"/></Icon>;
         const Bot = (p) => <Icon {...p}><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></Icon>;
+        const Leaf = (p) => <Icon {...p}><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.77 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></Icon>;
 
-        // --- 資料設定 (模擬 CWA API 回傳結構與縣市資料) ---
+        // --- 資料設定 (完整縣市行政區) ---
 
         const CITIES = [
-            { name: "臺北市", districts: ["信義區", "大安區", "中正區", "士林區", "北投區"] },
-            { name: "新北市", districts: ["板橋區", "新莊區", "中和區", "淡水區", "林口區"] },
-            { name: "桃園市", districts: ["桃園區", "中壢區", "蘆竹區", "龜山區"] },
-            { name: "臺中市", districts: ["西屯區", "北屯區", "南屯區", "豐原區"] },
-            { name: "臺南市", districts: ["安平區", "東區", "永康區", "中西區"] },
-            { name: "高雄市", districts: ["苓雅區", "左營區", "鼓山區", "前鎮區", "鳳山區"] },
-            { name: "基隆市", districts: ["仁愛區", "信義區"] },
-            { name: "新竹市", districts: ["東區", "北區"] },
+            { name: "台北市", districts: ["中正區", "大同區", "中山區", "松山區", "大安區", "萬華區", "信義區", "士林區", "北投區", "內湖區", "南港區", "文山區"] },
+            { name: "新北市", districts: ["萬里區", "金山區", "板橋區", "汐止區", "深坑區", "石碇區", "瑞芳區", "平溪區", "雙溪區", "貢寮區", "新店區", "樹林區", "鶯歌區", "三峽區", "淡水區", "蘆洲區", "五股區", "泰山區", "林口區", "土城區", "中和區", "永和區", "新莊區", "三重區", "八里區", "石門區", "三芝區", "烏來區"] },
+            { name: "桃園市", districts: ["中壢區", "平鎮區", "龍潭區", "楊梅區", "新屋區", "觀音區", "桃園區", "龜山區", "八德區", "大溪區", "復興區", "大園區", "蘆竹區"] },
+            { name: "台中市", districts: ["中區", "東區", "南區", "西區", "北區", "西屯區", "南屯區", "北屯區", "豐原區", "東勢區", "大甲區", "清水區", "沙鹿區", "梧棲區", "后里區", "神岡區", "潭子區", "大雅區", "新社區", "石岡區", "外埔區", "大安區", "烏日區", "大肚區", "龍井區", "霧峰區", "太平區", "和平區"] },
+            { name: "台南市", districts: ["中西區", "東區", "南區", "北區", "安平區", "安南區", "永康區", "歸仁區", "新化區", "左鎮區", "玉井區", "楠西區", "南化區", "仁德區", "關廟區", "龍崎區", "官田區", "麻豆區", "佳里區", "西港區", "七股區", "將軍區", "學甲區", "北門區", "新營區", "後壁區", "白河區", "東山區", "六甲區", "下營區", "柳營區", "鹽水區", "善化區", "大內區", "山上區", "新市區", "安定區"] },
+            { name: "高雄市", districts: ["新興區", "前金區", "苓雅區", "鹽埕區", "鼓山區", "旗津區", "前鎮區", "三民區", "楠梓區", "小港區", "左營區", "仁武區", "大社區", "岡山區", "路竹區", "阿蓮區", "田寮區", "燕巢區", "橋頭區", "梓官區", "彌陀區", "永安區", "湖內區", "鳳山區", "大寮區", "林園區", "美濃區", "六龜區", "甲仙區", "杉林區", "內門區", "茂林區", "桃源區", "那瑪夏區", "旗山區"] },
+            { name: "基隆市", districts: ["仁愛區", "信義區", "中正區", "中山區", "安樂區", "暖暖區", "七堵區"] },
+            { name: "新竹市", districts: ["東區", "北區", "香山區"] },
             { name: "嘉義市", districts: ["東區", "西區"] },
-            { name: "宜蘭縣", districts: ["宜蘭市", "羅東鎮"] },
-            { name: "花蓮縣", districts: ["花蓮市", "吉安鄉"] },
-            { name: "臺東縣", districts: ["臺東市", "卑南鄉"] },
-            { name: "南投縣", districts: ["南投市", "埔里鎮"] },
-            { name: "雲林縣", districts: ["斗六市", "虎尾鎮"] },
-            { name: "彰化縣", districts: ["彰化市", "員林市"] },
-            { name: "屏東縣", districts: ["屏東市", "恆春鎮"] },
-            { name: "苗栗縣", districts: ["苗栗市", "竹南鎮"] },
+            { name: "新竹縣", districts: ["竹北市", "竹東鎮", "新埔鎮", "關西鎮", "湖口鄉", "新豐鄉", "芎林鄉", "橫山鄉", "尖石鄉", "五峰鄉", "寶山鄉", "峨眉鄉"] },
+            { name: "苗栗縣", districts: ["苗栗市", "通霄鎮", "苑裡鎮", "竹南鎮", "頭份市", "後龍鎮", "卓蘭鎮", "大湖鄉", "公館鄉", "銅鑼鄉", "南庄鄉", "頭屋鄉", "三義鄉", "西湖鄉", "造橋鄉", "獅潭鄉", "泰安鄉"] },
+            { name: "彰化縣", districts: ["彰化市", "鹿港鎮", "和美鎮", "線西鄉", "伸港鄉", "福興鄉", "秀水鄉", "花壇鄉", "芬園鄉", "員林市", "溪湖鎮", "田中鎮", "大村鄉", "埔鹽鄉", "埔心鄉", "永靖鄉", "社頭鄉", "二水鄉", "田尾鄉", "埤頭鄉", "北斗鎮", "溪州鄉", "竹塘鄉", "芳苑鄉", "二林鎮", "大城鄉"] },
+            { name: "南投縣", districts: ["南投市", "埔里鎮", "草屯鎮", "竹山鎮", "集集鎮", "名間鄉", "鹿谷鄉", "中寮鄉", "魚池鄉", "國姓鄉", "水里鄉", "信義鄉"] },
+            { name: "雲林縣", districts: ["斗六市", "斗南鎮", "虎尾鎮", "西螺鎮", "土庫鎮", "北港鎮", "古坑鄉", "大埤鄉", "莿桐鄉", "林內鄉", "二崙鄉", "崙背鄉", "麥寮鄉", "臺西鄉", "東勢鄉", "褒忠鄉", "四湖鄉", "口湖鄉", "水林鄉"] },
+            { name: "嘉義縣", districts: ["太保市", "朴子市", "布袋鎮", "大林鎮", "民雄鄉", "溪口鄉", "新港鄉", "六腳鄉", "東石鄉", "義竹鄉", "鹿草鄉", "竹崎鄉", "梅山鄉", "番路鄉", "大埔鄉", "阿里山鄉"] },
+            { name: "屏東縣", districts: ["屏東市", "潮州鎮", "東港鎮", "恆春鎮", "萬丹鄉", "長治鄉", "麟洛鄉", "九如鄉", "里港鄉", "鹽埔鄉", "高樹鄉", "萬巒鄉", "內埔鄉", "竹田鄉", "新埤鄉", "枋寮鄉", "新園鄉", "崁頂鄉", "林邊鄉", "南州鄉", "佳冬鄉", "琉球鄉", "車城鄉", "滿州鄉", "枋山鄉", "三地門鄉", "霧臺鄉", "瑪家鄉", "泰武鄉", "來義鄉", "春日鄉", "獅子鄉", "牡丹鄉"] },
+            { name: "宜蘭縣", districts: ["宜蘭市", "羅東鎮", "蘇澳鎮", "頭城鎮", "礁溪鄉", "壯圍鄉", "員山鄉", "冬山鄉", "五結鄉", "三星鄉", "大同鄉", "南澳鄉"] },
+            { name: "花蓮縣", districts: ["花蓮市", "鳳林鎮", "玉里鎮", "新城鄉", "吉安鄉", "壽豐鄉", "光復鄉", "豐濱鄉", "瑞穗鄉", "萬榮鄉", "卓溪鄉", "秀林鄉", "富里鄉"] },
+            { name: "台東縣", districts: ["台東市", "成功鎮", "關山鎮", "卑南鄉", "大武鄉", "太麻里鄉", "東河鄉", "長濱鄉", "鹿野鄉", "池上鄉", "綠島鄉", "蘭嶼鄉", "延平鄉", "海端鄉", "達仁鄉", "金峰鄉"] },
+            { name: "澎湖縣", districts: ["馬公市", "湖西鄉", "白沙鄉", "西嶼鄉", "望安鄉", "七美鄉"] },
+            { name: "金門縣", districts: ["金城鎮", "金湖鎮", "金沙鎮", "金寧鄉", "烈嶼鄉", "烏坵鄉"] },
+            { name: "連江縣", districts: ["南竿鄉", "北竿鄉", "莒光鄉", "東引鄉"] }
         ];
 
-        // 模擬氣象資料生成器 (當沒有 API Key 或呼叫失敗時使用)
+        // 模擬氣象資料生成器
         const generateMockData = (city, district) => {
             const isRaining = Math.random() > 0.6;
-            const currentTemp = Math.floor(Math.random() * (32 - 14) + 14); // 範圍調整以利測試低溫
+            const currentTemp = Math.floor(Math.random() * (32 - 14) + 14); 
             
             // 數據隨機化
             const uv = Math.floor(Math.random() * 11);
@@ -137,7 +141,7 @@
             const aqi = Math.floor(Math.random() * 160);
             const visibility = Math.floor(Math.random() * 10); // km
 
-            // AI 助理訊息邏輯 - 更新版
+            // AI 助理訊息邏輯
             let warnings = [];
             if (currentTemp < 15) warnings.push("🥶 低溫寒流警訊，請務必做好保暖。");
             if (uv > 7) warnings.push("☀️ 紫外線太強，外出請做好防曬。");
@@ -148,7 +152,6 @@
 
             let aiSummary = "";
             if (warnings.length > 0) {
-                // 取前兩項重要的，避免文字過多
                 aiSummary = warnings.slice(0, 2).join(" ");
             } else {
                  if (currentTemp > 28) aiSummary = "天氣炎熱，多補充水分，預防中暑。";
@@ -158,6 +161,7 @@
             const today = new Date();
 
             return {
+                isMock: true, // 標記為模擬資料
                 current: {
                     dateStr: `${today.getMonth() + 1}/${today.getDate()}`,
                     dayStr: "今日",
@@ -180,7 +184,7 @@
                     const now = new Date();
                     now.setHours(now.getHours() + i);
                     const hour = now.getHours();
-                    const isNewDay = i > 0 && hour === 0; // 判斷是否跨日
+                    const isNewDay = i > 0 && hour === 0;
 
                     return {
                         time: `${String(hour).padStart(2, '0')}:00`,
@@ -214,29 +218,24 @@
             }
 
             try {
-                // 這裡示範呼叫「一般天氣預報-今明36小時」API
-                // 注意：實際 CWA API 需要處理複雜的 JSON 結構映射，且縣市名稱需對應 API 的 locationName
-                // 為了專案穩定性，若 API 呼叫失敗或格式不符，會自動降級為模擬資料
+                // 修正：CWA API 通常使用 "臺" 而非 "台"，在此做自動轉換以避免 API 錯誤
+                const apiCityName = city.replace(/台/g, '臺');
                 
-                const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${CWA_API_KEY}&locationName=${encodeURIComponent(city)}`;
+                // 這裡示範呼叫「一般天氣預報-今明36小時」API
+                // 注意：若您已實作真實 API 解析，請記得在回傳物件中將 isMock 設為 false
+                const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${CWA_API_KEY}&locationName=${encodeURIComponent(apiCityName)}`;
                 const response = await fetch(url);
                 if (!response.ok) throw new Error("API Network response was not ok");
                 
                 const data = await response.json();
                 console.log("CWA API Data:", data);
 
-                // 備註：
-                // 真實串接時，您需要解析 data.records.location[0].weatherElement
-                // 並將 Wx (天氣現象), PoP (降雨機率), MinT/MaxT (氣溫) 轉換為本 App 的資料格式
-                // 由於這需要數百行的解析代碼來處理各種 edge case，
-                // 在此教學範例中，我們驗證 Key 有效後，暫時仍回傳模擬資料以保證 UI 完整呈現。
-                // 您可以在此處加入真實的解析邏輯。
-                
-                return generateMockData(city, district); // 暫時回傳模擬資料
+                // --- 這裡保留模擬資料回傳，待您實作 JSON 解析邏輯後即可替換 ---
+                return generateMockData(city, district); 
 
             } catch (error) {
                 console.error("CWA API Fetch Error:", error);
-                return generateMockData(city, district); // 發生錯誤時回退
+                return generateMockData(city, district); 
             }
         };
 
@@ -314,7 +313,7 @@
             return (
                 <div className="flex flex-col min-h-screen pb-safe">
                     {/* Header: 固定在上方 */}
-                    <header className="sticky top-0 z-50 bg-white shadow-sm">
+                    <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md shadow-sm">
                         <div className="flex items-center justify-between px-4 py-3">
                             <button onClick={handleGPS} className="p-2 rounded-full hover:bg-gray-100 text-blue-600 transition-colors" aria-label="定位">
                                 <Navigation size={20} />
@@ -357,7 +356,7 @@
                         </div>
 
                         {/* Tabs */}
-                        <div className="flex border-b border-gray-200">
+                        <div className="flex border-b border-gray-200 bg-white/50">
                             {['current', 'observation', 'forecast'].map((tab) => (
                                 <button
                                     key={tab}
@@ -378,25 +377,25 @@
                     </header>
 
                     {/* Main Content Area */}
-                    <main className="flex-1 bg-gray-50 overflow-hidden relative">
+                    <main className="flex-1 overflow-hidden relative flex flex-col">
                         {loading && (
-                            <div className="absolute inset-0 bg-white/80 z-40 flex items-center justify-center">
+                            <div className="absolute inset-0 bg-white/60 z-40 flex items-center justify-center backdrop-blur-sm">
                                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                             </div>
                         )}
                         
                         {weather && (
-                            <div className="animate-fade-in">
+                            <div className="animate-fade-in flex-1">
                                 {/* TAB 1: 現在 (Current) */}
                                 {activeTab === 'current' && (
                                     <div className="pb-8">
-                                        {/* 目前天氣大卡片 */}
-                                        <div className="bg-white p-6 pb-8 text-center relative overflow-hidden shadow-sm">
+                                        {/* 目前天氣大卡片 - 背景設為透明以透出海景 */}
+                                        <div className="p-6 pb-8 text-center relative overflow-hidden">
                                             <div className="flex flex-col items-center">
                                                 <h2 className="text-gray-500 text-sm mb-1">{selectedCity.name} {selectedDistrict}</h2>
                                                 
                                                 {/* 日期與今日標示 */}
-                                                <div className="bg-blue-50 text-blue-600 text-xs font-bold px-3 py-1 rounded-full mb-1">
+                                                <div className="bg-white/70 text-blue-600 text-xs font-bold px-3 py-1 rounded-full mb-1 shadow-sm backdrop-blur-sm">
                                                     {weather.current.dayStr} • {weather.current.dateStr}
                                                 </div>
 
@@ -427,7 +426,7 @@
                                         </div>
 
                                         {/* 24小時預報 */}
-                                        <div className="mt-2 bg-white p-4 shadow-sm">
+                                        <div className="mt-2 bg-white/80 p-4 shadow-sm backdrop-blur-md mx-2 rounded-xl">
                                             <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center">
                                                 <span className="w-1 h-4 bg-blue-500 rounded mr-2"></span>
                                                 24 小時預報
@@ -455,7 +454,7 @@
                                         </div>
 
                                         {/* AI 氣象助理 */}
-                                        <div className="mt-2 mx-2 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl p-4 text-white shadow-md relative overflow-hidden">
+                                        <div className="mt-4 mx-2 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl p-4 text-white shadow-md relative overflow-hidden">
                                             <div className="absolute top-0 right-0 opacity-10 transform translate-x-4 -translate-y-4">
                                                 <Sparkles size={100} />
                                             </div>
@@ -474,7 +473,7 @@
                                     </div>
                                 )}
 
-                                {/* TAB 2: 觀測 (Observation) */}
+                                {/* TAB 2: 觀測 (Observation) - 字體放大版 & 版面重整 */}
                                 {activeTab === 'observation' && (
                                     <div className="p-2 grid grid-cols-2 gap-2">
                                         <Card 
@@ -501,46 +500,56 @@
                                             value={weather.current.uv}
                                             subtext={weather.current.uv > 7 ? "高危險" : (weather.current.uv > 5 ? "中量" : "低量")}
                                         />
+                                        
+                                        {/* 能見度 */}
                                         <Card 
                                             icon={<Eye className="text-indigo-500" />}
                                             title="能見度" 
                                             value={weather.current.visibility}
                                             subtext="良好"
                                         />
-                                        <div className="col-span-2 bg-white rounded-xl p-4 shadow-sm flex justify-between items-center">
-                                            <div className="flex flex-col items-center flex-1 border-r border-gray-100">
-                                                <span className="text-xs text-gray-500 mb-1">日出</span>
-                                                <Sunrise size={24} className="text-orange-400 mb-1" />
-                                                <span className="text-lg font-bold text-gray-800">{weather.current.sunrise}</span>
+
+                                        {/* 空氣品質 - 移到能見度右方，改為卡片樣式 */}
+                                        <div className="bg-white/90 backdrop-blur-sm rounded-xl p-4 shadow-sm flex flex-col justify-between h-32">
+                                            <div className="flex items-start justify-between">
+                                                <span className="text-sm text-gray-500 font-bold">空氣品質</span>
+                                                <div className="p-1.5 bg-gray-50 rounded-lg"><Leaf className="text-green-500" size={24}/></div>
                                             </div>
-                                            <div className="flex flex-col items-center flex-1">
-                                                <span className="text-xs text-gray-500 mb-1">日落</span>
-                                                <Sunset size={24} className="text-purple-400 mb-1" />
-                                                <span className="text-lg font-bold text-gray-800">{weather.current.sunset}</span>
+                                            <div>
+                                                <div className="flex items-baseline space-x-2">
+                                                    <div className="text-4xl font-bold text-gray-800 tracking-tight">{weather.current.aqi}</div>
+                                                    <AQIBadge value={weather.current.aqi} />
+                                                </div>
+                                                <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
+                                                    <div 
+                                                        className="bg-green-500 h-1.5 rounded-full transition-all duration-500" 
+                                                        style={{ width: `${Math.min(weather.current.aqi, 100)}%` }}
+                                                    ></div>
+                                                </div>
                                             </div>
                                         </div>
-                                        
-                                        <div className="col-span-2 bg-white rounded-xl p-4 shadow-sm">
-                                            <div className="flex justify-between items-center mb-2">
-                                                <span className="text-sm text-gray-500 font-bold">空氣品質</span>
-                                                <AQIBadge value={weather.current.aqi} />
+
+                                        {/* 日出日落 - 字體放大，移至最下方 */}
+                                        <div className="col-span-2 bg-white/90 backdrop-blur-sm rounded-xl p-4 shadow-sm flex justify-between items-center mt-1">
+                                            <div className="flex flex-col items-center flex-1 border-r border-gray-100 py-2">
+                                                <span className="text-sm text-gray-500 mb-1">日出</span>
+                                                <Sunrise size={32} className="text-orange-400 mb-2" />
+                                                <span className="text-3xl font-bold text-gray-800">{weather.current.sunrise}</span>
                                             </div>
-                                            <div className="w-full bg-gray-200 rounded-full h-2.5">
-                                                <div 
-                                                    className="bg-green-500 h-2.5 rounded-full transition-all duration-500" 
-                                                    style={{ width: `${Math.min(weather.current.aqi, 100)}%` }}
-                                                ></div>
+                                            <div className="flex flex-col items-center flex-1 py-2">
+                                                <span className="text-sm text-gray-500 mb-1">日落</span>
+                                                <Sunset size={32} className="text-purple-400 mb-2" />
+                                                <span className="text-3xl font-bold text-gray-800">{weather.current.sunset}</span>
                                             </div>
-                                            <p className="text-xs text-gray-400 mt-2 text-right">AQI 指數: {weather.current.aqi}</p>
                                         </div>
                                     </div>
                                 )}
 
                                 {/* TAB 3: 預報 (Forecast) */}
                                 {activeTab === 'forecast' && (
-                                    <div className="bg-white min-h-[calc(100vh-120px)]">
+                                    <div className="bg-white/80 backdrop-blur-md min-h-[calc(100vh-120px)] rounded-t-2xl mt-4 mx-2">
                                         {weather.daily.map((day, idx) => (
-                                            <div key={idx} className="flex items-center justify-between px-5 py-4 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors">
+                                            <div key={idx} className="flex items-center justify-between px-5 py-4 border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
                                                 <div className="flex flex-col w-16">
                                                     <span className={`text-sm font-bold ${idx === 0 ? 'text-blue-600' : 'text-gray-800'}`}>{day.day}</span>
                                                     <span className="text-xs text-gray-400">{day.date}</span>
@@ -573,21 +582,34 @@
                                 )}
                             </div>
                         )}
+                        
+                        {/* 資料來源 Footer */}
+                        {weather && (
+                            <div className="py-4 text-center text-xs text-gray-500 bg-white/50 backdrop-blur-sm">
+                                {weather.isMock ? (
+                                    "使用模擬資料"
+                                ) : (
+                                    <span>
+                                        使用 <a href="https://www.cwa.gov.tw/V8/C/" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-medium hover:text-blue-800">中央氣象署CWA</a> 資料
+                                    </span>
+                                )}
+                            </div>
+                        )}
                     </main>
                 </div>
             );
         };
 
-        // --- 小元件: 觀測卡片 ---
+        // --- 小元件: 觀測卡片 (維持白色半透明卡片以適應背景) ---
         const Card = ({ icon, title, value, subtext }) => (
-            <div className="bg-white rounded-xl p-4 shadow-sm flex flex-col justify-between h-32">
+            <div className="bg-white/90 backdrop-blur-sm rounded-xl p-4 shadow-sm flex flex-col justify-between h-32">
                 <div className="flex items-start justify-between">
                     <span className="text-sm text-gray-500 font-bold">{title}</span>
                     <div className="p-1.5 bg-gray-50 rounded-lg">{icon}</div>
                 </div>
                 <div>
-                    <div className="text-2xl font-bold text-gray-800 tracking-tight">{value}</div>
-                    <div className="text-xs text-gray-400 mt-0.5">{subtext}</div>
+                    <div className="text-4xl font-bold text-gray-800 tracking-tight">{value}</div>
+                    <div className="text-xs text-gray-400 mt-1">{subtext}</div>
                 </div>
             </div>
         );
