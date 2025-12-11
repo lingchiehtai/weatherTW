@@ -108,6 +108,18 @@
             { name: "連江縣", districts: ["南竿鄉", "北竿鄉", "莒光鄉", "東引鄉"] }
         ];
 
+        // --- 輔助函式：計算兩點經緯度距離 (Haversine Formula) ---
+        const calculateDistance = (lat1, lon1, lat2, lon2) => {
+            const R = 6371; // 地球半徑 (km)
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        };
+
         // --- 輔助函式：根據溫度與天氣產生 AI 建議 ---
         const generateAISummary = (temp, isRaining, uv, windSpeed, aqi, visibility) => {
             let warnings = [];
@@ -199,11 +211,7 @@
                 const apiCityName = city.replace(/台/g, '臺');
                 const today = new Date();
 
-                // API 1: 預報資料 (F-C0032-001) - 取得未來36小時預報 (降雨機率, 高低溫)
                 const forecastUrl = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${CWA_API_KEY}&locationName=${encodeURIComponent(apiCityName)}`;
-                
-                // API 2: 觀測資料 (O-A0003-001) - 取得全台測站即時觀測 (真實氣溫, 風速, 濕度)
-                // 注意: 此檔案較大，實際應用可考慮後端快取，前端直接抓取可能需稍候
                 const observationUrl = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=${CWA_API_KEY}`;
 
                 const [forecastRes, observationRes] = await Promise.all([
@@ -214,24 +222,20 @@
                 if (!forecastRes.ok) throw new Error("Forecast API failed");
                 const forecastData = await forecastRes.json();
                 
-                // 處理預報資料
                 const locationData = forecastData.records.location[0];
                 const weatherElements = locationData.weatherElement;
                 const getElement = (name) => weatherElements.find(el => el.elementName === name)?.time[0]?.parameter;
                 
-                const wx = getElement("Wx"); // 天氣現象
-                const pop = getElement("PoP"); // 降雨機率
+                const wx = getElement("Wx");
+                const pop = getElement("PoP");
                 const minT = getElement("MinT"); 
                 const maxT = getElement("MaxT"); 
 
-                // 處理觀測資料
                 let obsData = null;
                 if (observationRes.ok) {
                     const obsJson = await observationRes.json();
                     const stations = obsJson.records.Station;
                     
-                    // 尋找最匹配的測站: 同縣市 && 同行政區
-                    // 若無完全匹配，則找同縣市的第一個測站當備援
                     const targetTown = district;
                     const targetCounty = apiCityName;
 
@@ -241,39 +245,33 @@
 
                     if (matchStation && matchStation.WeatherElement) {
                         const w = matchStation.WeatherElement;
-                        // 檢查數據是否為 -99 (無效值)，若是則使用預設值
                         const val = (v) => (v === -99 || v === "-99") ? null : parseFloat(v);
                         
                         obsData = {
                             temp: val(w.AirTemperature),
                             humidity: val(w.RelativeHumidity),
                             windSpeed: val(w.WindSpeed),
-                            weather: w.Weather, // 觀測到的天氣現象文字
-                            visibility: val(w.Visibility), // 部分站點有
-                            uv: -99 // 自動測站通常無 UV，需另外處理或模擬
+                            weather: w.Weather, 
+                            visibility: val(w.Visibility), 
+                            uv: -99 
                         };
                     }
                 }
 
-                // 整合數據 (若觀測數據缺失，則使用預報估算或模擬)
                 const rainProb = parseInt(pop.parameterName);
                 const isRaining = rainProb > 50 || wx.parameterName.includes("雨");
                 
-                // 優先使用觀測溫度，否則用預報平均
                 const currentTemp = obsData?.temp ?? Math.round((parseInt(minT.parameterName) + parseInt(maxT.parameterName)) / 2);
                 const humidity = obsData?.humidity ?? (isRaining ? 85 : 60);
                 const windSpeed = obsData?.windSpeed ?? (isRaining ? 4 : 2);
-                // 觀測天氣文字優先，否則用預報
                 const description = obsData?.weather && obsData.weather !== "-99" ? obsData.weather : wx.parameterName;
 
-                // 決定圖示
                 let conditionIcon = "Sunny";
                 if (description.includes("雨")) conditionIcon = "Rain";
                 else if (description.includes("雲") || description.includes("陰")) conditionIcon = "Cloudy";
 
-                // 模擬/推算缺少的數據 (AQI, UV, Visibility若無)
                 const uv = (obsData?.uv && obsData.uv !== -99) ? obsData.uv : (isRaining ? 2 : 6);
-                const aqi = isRaining ? 35 : 65; // CWA 無 AQI，維持估算
+                const aqi = isRaining ? 35 : 65; 
                 const visibility = (obsData?.visibility && obsData.visibility !== -99) ? obsData.visibility : (isRaining ? 5 : 20);
 
                 const aiSummary = generateAISummary(currentTemp, description.includes("雨"), uv, windSpeed, aqi, visibility);
@@ -298,7 +296,6 @@
                         description: description,
                         aiSummary: aiSummary
                     },
-                    // 24小時預報 (使用預報API的第一時段數據做基準模擬趨勢，因免費API無逐時預報)
                     hourly: Array.from({ length: 24 }, (_, i) => {
                         const now = new Date();
                         now.setHours(now.getHours() + i);
@@ -307,12 +304,11 @@
                         return {
                             time: `${String(hour).padStart(2, '0')}:00`,
                             isNewDay: isNewDay,
-                            temp: currentTemp + Math.floor(Math.random() * 3 - 1), // 簡單擾動
+                            temp: currentTemp + Math.floor(Math.random() * 3 - 1), 
                             icon: conditionIcon,
                             rainProb: rainProb
                         };
                     }),
-                    // 未來7天預報 (從明天開始)
                     daily: Array.from({ length: 7 }, (_, i) => {
                         const date = new Date();
                         date.setDate(date.getDate() + i + 1);
@@ -391,23 +387,100 @@
                 setSelectedDistrict(e.target.value);
             };
 
+            // 處理真實 GPS 定位
             const handleGPS = () => {
+                if (!navigator.geolocation) {
+                    alert("您的瀏覽器不支援地理定位功能");
+                    return;
+                }
+
                 setLoading(true);
-                // 模擬 GPS 定位邏輯
-                setTimeout(() => {
-                    const targetCity = CITIES.find(c => c.name === "高雄市"); 
-                    if (targetCity) {
-                        setSelectedCity(targetCity);
-                        const targetDistrict = "苓雅區";
-                        if (targetCity.districts.includes(targetDistrict)) {
-                            setSelectedDistrict(targetDistrict);
-                        } else {
-                            setSelectedDistrict(targetCity.districts[0]);
+
+                navigator.geolocation.getCurrentPosition(
+                    async (position) => {
+                        const { latitude, longitude } = position.coords;
+                        
+                        if (!CWA_API_KEY) {
+                            alert("未設定 API Key，無法進行座標反查，將使用模擬位置。");
+                            // 模擬備援
+                             setTimeout(() => {
+                                const targetCity = CITIES.find(c => c.name === "高雄市"); 
+                                if (targetCity) {
+                                    setSelectedCity(targetCity);
+                                    setSelectedDistrict("苓雅區");
+                                    alert(`無法反查座標，已切換至預設位置：${targetCity.name} 苓雅區`);
+                                }
+                                setLoading(false);
+                            }, 1000);
+                            return;
                         }
-                        alert(`已定位至目前位置：${targetCity.name} ${targetDistrict}`);
-                    }
-                    setLoading(false);
-                }, 1000);
+
+                        try {
+                            // 使用 CWA 觀測資料 API (O-A0003-001) 來尋找最近的測站
+                            const observationUrl = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=${CWA_API_KEY}`;
+                            const response = await fetch(observationUrl);
+                            
+                            if (!response.ok) throw new Error("無法取得測站資料");
+                            
+                            const data = await response.json();
+                            const stations = data.records.Station;
+                            
+                            let minDistance = Infinity;
+                            let nearestStation = null;
+
+                            // 尋找最近測站
+                            stations.forEach(station => {
+                                const sLat = station.GeoInfo.Coordinates[1].StationLatitude;
+                                const sLon = station.GeoInfo.Coordinates[1].StationLongitude;
+                                const dist = calculateDistance(latitude, longitude, sLat, sLon);
+                                
+                                if (dist < minDistance) {
+                                    minDistance = dist;
+                                    nearestStation = station;
+                                }
+                            });
+
+                            if (nearestStation) {
+                                const foundCityName = nearestStation.GeoInfo.CountyName.replace(/臺/g, '台'); // 統一轉為 "台" 以匹配 CITIES
+                                const foundTownName = nearestStation.GeoInfo.TownName;
+
+                                // 嘗試在 CITIES 列表中找到對應的縣市與行政區
+                                const targetCity = CITIES.find(c => c.name === foundCityName);
+                                
+                                if (targetCity) {
+                                    setSelectedCity(targetCity);
+                                    
+                                    // 檢查該縣市是否有該行政區，若有則切換，若無則切換到該縣市第一個行政區
+                                    if (targetCity.districts.includes(foundTownName)) {
+                                        setSelectedDistrict(foundTownName);
+                                        alert(`已定位至：${foundCityName} ${foundTownName} (最近測站: ${nearestStation.StationName}, 距離: ${minDistance.toFixed(1)}km)`);
+                                    } else {
+                                        setSelectedDistrict(targetCity.districts[0]);
+                                        alert(`已定位至：${foundCityName} (行政區 ${foundTownName} 不在列表中，已選預設區)`);
+                                    }
+                                } else {
+                                    alert(`定位位置 ${foundCityName} 不在支援列表中`);
+                                }
+                            }
+
+                        } catch (error) {
+                            console.error("GPS Reverse Geocoding Error:", error);
+                            alert("定位成功但無法取得位置名稱，請檢查網路或 API Key");
+                        } finally {
+                            setLoading(false);
+                        }
+                    },
+                    (error) => {
+                        console.error("Geolocation Error:", error);
+                        let msg = "無法取得您的位置";
+                        if (error.code === 1) msg = "您拒絕了定位請求";
+                        else if (error.code === 2) msg = "無法偵測目前位置";
+                        else if (error.code === 3) msg = "定位逾時";
+                        alert(msg);
+                        setLoading(false);
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                );
             };
 
             return (
