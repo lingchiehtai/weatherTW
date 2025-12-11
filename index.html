@@ -120,6 +120,31 @@
             return R * c;
         };
 
+        // --- 輔助函式：根據縣市名稱返回略為準確的日出日落時間 (Placeholder) ---
+        // 取得準確的天文數據需要整合 CWA A-B0062-001 API。此處使用季節性估計。
+        const getAstronomicalData = (cityName) => {
+            const date = new Date();
+            const month = date.getMonth(); // 0 (Jan) - 11 (Dec)
+            
+            let isSummer = month >= 5 && month <= 8; // May to Aug is summer/longest days
+            let isNorth = cityName.includes("台北") || cityName.includes("新北") || cityName.includes("基隆") || cityName.includes("宜蘭");
+            
+            let sunrise, sunset;
+
+            if (isSummer) {
+                // 夏季/長日照 (約 05:00 - 18:40)
+                sunrise = isNorth ? "05:15" : "05:05";
+                sunset = isNorth ? "18:45" : "18:55";
+            } else {
+                // 冬季/短日照 (約 06:15 - 17:30)
+                sunrise = isNorth ? "06:35" : "06:20";
+                sunset = isNorth ? "17:05" : "17:30";
+            }
+
+            return { sunrise, sunset };
+        };
+
+
         // --- 輔助函式：根據溫度與天氣產生 AI 建議 ---
         const generateAISummary = (temp, isRaining, uv, windSpeed, aqi, visibility) => {
             let warnings = [];
@@ -150,6 +175,9 @@
             
             const aiSummary = generateAISummary(currentTemp, isRaining, uv, windSpeed, aqi, visibility);
             const today = new Date();
+            
+            // 使用略為準確的模擬天文數據
+            const { sunrise, sunset } = getAstronomicalData(city);
 
             return {
                 isMock: true,
@@ -166,8 +194,8 @@
                     windSpeed: windSpeed,
                     uv: uv,
                     visibility: `${visibility}km`,
-                    sunrise: "05:30",
-                    sunset: "18:40",
+                    sunrise: sunrise, // 使用模擬值
+                    sunset: sunset,   // 使用模擬值
                     description: isRaining ? "短暫雨" : "多雲時晴",
                     aiSummary: aiSummary
                 },
@@ -202,15 +230,17 @@
 
         // --- 真實 API 串接邏輯 ---
         const fetchCWAData = async (city, district) => {
+            const apiCityName = city.replace(/台/g, '臺');
+            
             if (!CWA_API_KEY) {
                 console.warn("未設定 CWA API Key，使用模擬資料。");
                 return generateMockData(city, district);
             }
 
             try {
-                const apiCityName = city.replace(/台/g, '臺');
                 const today = new Date();
-
+                
+                // --- 步驟 1: 預報與觀測資料 ---
                 const forecastUrl = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${CWA_API_KEY}&locationName=${encodeURIComponent(apiCityName)}`;
                 const observationUrl = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=${CWA_API_KEY}`;
 
@@ -231,6 +261,7 @@
                 const minT = getElement("MinT"); 
                 const maxT = getElement("MaxT"); 
 
+                // --- 步驟 2: 處理觀測資料 (即時溫度、濕度等) ---
                 let obsData = null;
                 if (observationRes.ok) {
                     const obsJson = await observationRes.json();
@@ -245,7 +276,7 @@
 
                     if (matchStation && matchStation.WeatherElement) {
                         const w = matchStation.WeatherElement;
-                        const val = (v) => (v === -99 || v === "-99") ? null : parseFloat(v);
+                        const val = (v) => (v === -99 || v === "-99" || v === null) ? null : parseFloat(v);
                         
                         obsData = {
                             temp: val(w.AirTemperature),
@@ -253,23 +284,28 @@
                             windSpeed: val(w.WindSpeed),
                             weather: w.Weather, 
                             visibility: val(w.Visibility), 
-                            uv: -99 
+                            uv: val(w.UVIndex) || -99 // 嘗試取得紫外線
                         };
                     }
                 }
-
-                const rainProb = parseInt(pop.parameterName);
-                const isRaining = rainProb > 50 || wx.parameterName.includes("雨");
                 
-                const currentTemp = obsData?.temp ?? Math.round((parseInt(minT.parameterName) + parseInt(maxT.parameterName)) / 2);
+                // --- 步驟 3: 處理日出日落 (使用略為準確的模擬值) ---
+                const { sunrise, sunset } = getAstronomicalData(city); 
+                
+                // --- 步驟 4: 整合數據與補償 ---
+                const rainProb = parseInt(pop?.parameterName ?? 10);
+                const isRaining = rainProb > 50 || (wx?.parameterName.includes("雨") ?? false);
+                
+                const currentTemp = obsData?.temp ?? Math.round((parseInt(minT?.parameterName ?? 20) + parseInt(maxT?.parameterName ?? 25)) / 2);
                 const humidity = obsData?.humidity ?? (isRaining ? 85 : 60);
                 const windSpeed = obsData?.windSpeed ?? (isRaining ? 4 : 2);
-                const description = obsData?.weather && obsData.weather !== "-99" ? obsData.weather : wx.parameterName;
+                const description = obsData?.weather && obsData.weather !== "-99" ? obsData.weather : (wx?.parameterName ?? "多雲");
 
                 let conditionIcon = "Sunny";
                 if (description.includes("雨")) conditionIcon = "Rain";
                 else if (description.includes("雲") || description.includes("陰")) conditionIcon = "Cloudy";
 
+                // AQI, UV, Visibility: 觀測 API 可能無資料，進行模擬補償
                 const uv = (obsData?.uv && obsData.uv !== -99) ? obsData.uv : (isRaining ? 2 : 6);
                 const aqi = isRaining ? 35 : 65; 
                 const visibility = (obsData?.visibility && obsData.visibility !== -99) ? obsData.visibility : (isRaining ? 5 : 20);
@@ -282,8 +318,8 @@
                         dateStr: `${today.getMonth() + 1}/${today.getDate()}`,
                         dayStr: "今日",
                         temp: currentTemp,
-                        high: parseInt(maxT.parameterName),
-                        low: parseInt(minT.parameterName),
+                        high: parseInt(maxT?.parameterName ?? 25),
+                        low: parseInt(minT?.parameterName ?? 20),
                         condition: conditionIcon,
                         rainProb: rainProb,
                         aqi: aqi,
@@ -291,8 +327,8 @@
                         windSpeed: windSpeed,
                         uv: uv,
                         visibility: `${visibility}km`,
-                        sunrise: "05:30",
-                        sunset: "18:40",
+                        sunrise: sunrise, // 使用略為準確的模擬值
+                        sunset: sunset,   // 使用略為準確的模擬值
                         description: description,
                         aiSummary: aiSummary
                     },
@@ -316,8 +352,8 @@
                         return {
                             date: `${date.getMonth() + 1}/${date.getDate()}`,
                             day: dayName,
-                            high: parseInt(maxT.parameterName) + Math.floor(Math.random() * 4 - 2),
-                            low: parseInt(minT.parameterName) + Math.floor(Math.random() * 4 - 2),
+                            high: parseInt(maxT?.parameterName ?? 25) + Math.floor(Math.random() * 4 - 2),
+                            low: parseInt(minT?.parameterName ?? 20) + Math.floor(Math.random() * 4 - 2),
                             icon: conditionIcon,
                             rainProb: Math.max(0, rainProb + Math.floor(Math.random() * 20 - 10))
                         };
@@ -375,7 +411,7 @@
 
             useEffect(() => {
                 updateWeather();
-            }, [selectedCity, selectedDistrict]);
+            }, [selectedCity.name, selectedDistrict]); // Dependency array updated to include name/district strings
 
             const handleCityChange = (e) => {
                 const city = CITIES.find(c => c.name === e.target.value);
@@ -430,6 +466,9 @@
 
                             // 尋找最近測站
                             stations.forEach(station => {
+                                // 檢查座標是否存在，避免出錯
+                                if (!station.GeoInfo.Coordinates || station.GeoInfo.Coordinates.length < 2) return;
+
                                 const sLat = station.GeoInfo.Coordinates[1].StationLatitude;
                                 const sLon = station.GeoInfo.Coordinates[1].StationLongitude;
                                 const dist = calculateDistance(latitude, longitude, sLat, sLon);
