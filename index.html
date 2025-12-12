@@ -666,14 +666,16 @@
 
                                                 {/* ✨ 新排版 3: 溫度範圍 (高低溫並排居中) */}
                                                 <div className="flex items-center justify-center space-x-6 text-base mb-4">
-                                                    {/* 最高溫 */}
-                                                    <div className="flex items-baseline text-red-600 font-medium">
-                                                        <span className="text-xs mr-1">最高</span> {weather.current.high}°
+													{/* 最高溫 */}
+                                                    <div className="flex flex-col items-center text-red-600 font-medium">
+                                                        <span className="text-sm mr-1">最高</span> 
+                                                        <span className="text-3xl font-bold">{weather.current.high}°</span>
                                                     </div>
                                                     
                                                     {/* 最低溫 */}
-                                                    <div className="flex items-baseline text-blue-600 font-medium">
-                                                        <span className="text-xs mr-1">最低</span> {weather.current.low}°
+                                                    <div className="flex flex-col items-center text-blue-600 font-medium">
+                                                        <span className="text-sm mr-1">最低</span> 
+                                                        <span className="text-3xl font-bold">{weather.current.low}°</span>
                                                     </div>
                                                 </div>
                                                 
