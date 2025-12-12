@@ -181,6 +181,7 @@
 
             return {
                 isMock: true,
+				updateTime: new Date().toISOString(), // 或 "模擬資料"
                 current: {
                     dateStr: `${today.getMonth() + 1}/${today.getDate()}`,
                     dayStr: "今日",
@@ -287,6 +288,12 @@
                             uv: val(w.UVIndex) || -99 // 嘗試取得紫外線
                         };
                     }
+					//加入氣象數據的觀測時間
+					let updateTime = null;
+					if (matchStation && matchStation.ObsTime) {
+						updateTime = matchStation.ObsTime.DateTime;  // e.g. 2025-01-01 14:10:00
+					}
+
                 }
                 
                 // --- 步驟 3: 處理日出日落 (使用略為準確的模擬值) ---
@@ -314,6 +321,7 @@
 
                 return {
                     isMock: false,
+					updateTime,   // 數據觀測時間
                     current: {
                         dateStr: `${today.getMonth() + 1}/${today.getDate()}`,
                         dayStr: "今日",
@@ -798,6 +806,11 @@
                                         使用 <a href="https://www.cwa.gov.tw/V8/C/" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-medium hover:text-blue-800">中央氣象署CWA</a> 資料
                                     </span>
                                 )}
+								//顯示觀測資料更新時間
+								<div className="mt-1 text-gray-400">
+									更新時間：{weather.updateTime || "—"}
+								</div>
+
                             </div>
                         )}
                     </main>
