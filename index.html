@@ -120,6 +120,29 @@
             return R * c;
         };
 
+		// --- 將時間字串轉換成台北時間並格式化為 YYYY-MM-DD HH:mm:ss
+		const formatToTaipeiTime = (timeStr) => {
+			if (!timeStr) return null;
+
+			const date = new Date(timeStr);
+
+			// 使用 Asia/Taipei 時區格式化
+			const formatted = new Intl.DateTimeFormat("zh-TW", {
+				timeZone: "Asia/Taipei",
+				year: "numeric",
+				month: "2-digit",
+				day: "2-digit",
+				hour: "2-digit",
+				minute: "2-digit",
+				second: "2-digit",
+				hour12: false
+			}).format(date);
+
+			// 將 "2025/01/16 14:20:00" → "2025-01-16 14:20:00"
+			return formatted.replace(/\//g, "-");
+		};
+
+
         // --- 輔助函式：根據縣市名稱返回略為準確的日出日落時間 (Placeholder) ---
         // 取得準確的天文數據需要整合 CWA A-B0062-001 API。此處使用季節性估計。
         const getAstronomicalData = (cityName) => {
@@ -181,7 +204,7 @@
 
             return {
                 isMock: true,
-				updateTime: new Date().toISOString(), // 或 "模擬資料"
+				updateTime: formatToTaipeiTime(new Date().toISOString()),  // mock 版本的更新時間
                 current: {
                     dateStr: `${today.getMonth() + 1}/${today.getDate()}`,
                     dayStr: "今日",
@@ -264,6 +287,8 @@
 
                 // --- 步驟 2: 處理觀測資料 (即時溫度、濕度等) ---
                 let obsData = null;
+				let updateTime = null;  // 
+
                 if (observationRes.ok) {
                     const obsJson = await observationRes.json();
                     const stations = obsJson.records.Station;
@@ -291,7 +316,9 @@
 					//加入氣象數據的觀測時間
 					let updateTime = null;
 					if (matchStation && matchStation.ObsTime) {
-						updateTime = matchStation.ObsTime.DateTime;  // e.g. 2025-01-01 14:10:00
+						//updateTime = matchStation.ObsTime.DateTime;  // e.g. 2025-12-12T09:58:42.088Z
+					    updateTime = formatToTaipeiTime(matchStation.ObsTime.DateTime); // e.g. 2025-01-01 14:10:00
+
 					}
 
                 }
@@ -807,9 +834,11 @@
                                     </span>
                                 )}
 								//顯示觀測資料更新時間
-								<div className="mt-1 text-gray-400">
-									更新時間：{weather.updateTime || "—"}
-								</div>
+								{weather.updateTime && (
+									<div className="mt-1 text-gray-400">
+										更新時間：{weather.updateTime}
+									</div>
+								)}
 
                             </div>
                         )}
