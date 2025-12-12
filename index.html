@@ -643,23 +643,37 @@
                                                     {weather.current.dayStr} • {weather.current.dateStr}
                                                 </div>
 
+                                                {/* ✨ 新排版 1: 核心溫度 (圖示 + 溫度) - 保持不變 */}
                                                 <div className="flex items-center justify-center space-x-2 my-2">
                                                     <WeatherIcon type={weather.current.condition} size={72} />
                                                     <div className="text-7xl font-light tracking-tighter text-gray-800">
                                                         {weather.current.temp}<span className="text-3xl relative -top-6">°</span>
                                                     </div>
                                                 </div>
-                                                <p className="text-lg text-gray-700 font-medium mb-3">{weather.current.description}</p>
                                                 
-                                                <div className="flex items-center space-x-6 text-sm">
-                                                    <div className="flex items-center text-red-500 font-medium">
+                                                {/* ✨ 新排版 2: 天氣描述 + 降雨機率 (水平並排) */}
+                                                <div className="flex items-center justify-center space-x-4 mb-3">
+                                                    
+                                                    {/* 天氣狀態顯示文字 (描述) */}
+                                                    <p className="text-lg text-gray-700 font-medium m-0 p-0">{weather.current.description}</p>
+                                                    
+                                                    {/* 降雨機率 (移到右邊) */}
+                                                    <div className="flex items-center text-lg text-blue-600 font-medium">
+                                                        <Umbrella size={18} className="mr-1"/> 
+                                                        {weather.current.rainProb}%
+                                                    </div>
+                                                </div>
+
+                                                {/* ✨ 新排版 3: 溫度範圍 (高低溫並排居中) */}
+                                                <div className="flex items-center justify-center space-x-6 text-base mb-4">
+                                                    {/* 最高溫 */}
+                                                    <div className="flex items-baseline text-red-600 font-medium">
                                                         <span className="text-xs mr-1">最高</span> {weather.current.high}°
                                                     </div>
-                                                    <div className="flex items-center text-blue-500 font-medium">
+                                                    
+                                                    {/* 最低溫 */}
+                                                    <div className="flex items-baseline text-blue-600 font-medium">
                                                         <span className="text-xs mr-1">最低</span> {weather.current.low}°
-                                                    </div>
-                                                    <div className="flex items-center text-blue-600">
-                                                        <Umbrella size={14} className="mr-1"/> {weather.current.rainProb}%
                                                     </div>
                                                 </div>
                                                 
