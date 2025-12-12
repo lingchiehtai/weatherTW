@@ -279,7 +279,9 @@
                 const locationData = forecastData.records.location[0];
                 const weatherElements = locationData.weatherElement;
                 const getElement = (name) => weatherElements.find(el => el.elementName === name)?.time[0]?.parameter;
-                
+				// 新增: 取得預報資料的發布時間 (當觀測時間（updateTime）無法取得時，使用預報資料的發布時間作為備援。)
+				const backupUpdateTime = formatToTaipeiTime(forecastData.records.datasetPublishTime);
+						
                 const wx = getElement("Wx");
                 const pop = getElement("PoP");
                 const minT = getElement("MinT"); 
@@ -318,7 +320,6 @@
 					if (matchStation && matchStation.ObsTime) {
 						//updateTime = matchStation.ObsTime.DateTime;  // e.g. 2025-12-12T09:58:42.088Z
 					    updateTime = formatToTaipeiTime(matchStation.ObsTime.DateTime); // e.g. 2025-01-01 14:10:00
-
 					}
 
                 }
@@ -348,7 +349,7 @@
 
                 return {
                     isMock: false,
-					updateTime,   // 數據觀測時間
+					updateTime: updateTime || backupUpdateTime,   // 數據觀測時間
                     current: {
                         dateStr: `${today.getMonth() + 1}/${today.getDate()}`,
                         dayStr: "今日",
